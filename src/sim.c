@@ -30,11 +30,15 @@ void sim_create_circle(
     float current_radians = 0;
     float x = 0;
     float y = 0;
+    Body *body = NULL;
+    mfloat_t rng_vel[VEC2_SIZE];
     while(current_radians < 2 * M_PI)
     {
         x = center_x + radius * cos(current_radians);
         y = center_y + radius * sin(current_radians);
-        body_create(&sim->display, sim->bodies, x, y, BODY_DEFAULT_MASS);
+        body = body_create(&sim->display, sim->bodies, x, y, BODY_DEFAULT_MASS);
+        sim_random_vector(rng_vel, 1);
+        vec2_assign(body->vel, rng_vel);
         current_radians += offset_radians;
     }
 }
@@ -82,9 +86,13 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
 {
     srand((unsigned int)time(NULL));
     mfloat_t pos[] = {sim_random_uint(10, WIN_WIDTH - 10), sim_random_uint(10, WIN_HEIGHT - 10)};
+    mfloat_t rng_vel[VEC2_SIZE];
+    Body *body = NULL;
     for(size_t i = 0; i < count; i++)
     {
-        body_create(&sim->display, sim->bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
+        body = body_create(&sim->display, sim->bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
+        sim_random_vector(rng_vel, 1);
+        vec2_assign(body->vel, rng_vel);
         pos[0] = sim_random_uint(10, WIN_WIDTH - 10);
         pos[1] = sim_random_uint(10, WIN_HEIGHT - 10);
     }
@@ -93,6 +101,13 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
 sfUint32 sim_random_uint(sfUint32 min, sfUint32 max) 
 {
     return rand() % (max - min + 1) + min;
+}
+
+void sim_random_vector(mfloat_t *result, float max_length)
+{
+    vec2_one(result);
+    vec2_rotate(result, result, sim_random_uint(0, 2 * M_PI));
+    vec2_multiply_f(result, result, sim_random_uint(0, max_length));
 }
 
 void sim_destroy(Sim *sim)
@@ -105,6 +120,7 @@ void sim_destroy(Sim *sim)
             sfText_destroy(sim->bodies[i].info_text);
         }
     }
+    sfText_destroy(sim->fps_text);
     sfClock_destroy(sim->delta_clock);
     sfView_destroy(sim->display.view);
     sfRenderWindow_destroy(sim->display.render_window);

@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include "body.h"
 #include "sim.h"
+#include "trail.h"
 #include "SFML/Graphics.h"
-
-const mfloat_t g_GRAVITY[] = {0, 9.81f};
 
 void body_update(Body *body, Body *bodies, float delta_time)
 {
@@ -47,26 +46,32 @@ void body_update(Body *body, Body *bodies, float delta_time)
 
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
     sfVector2f new_pos = pos;
+    sfBool reposition_needed = sfFalse;
     if(pos.x > WIN_WIDTH)
     {
         new_pos.x = 0;
+        reposition_needed = sfTrue;
     }
     else if(pos.x < 0)
     {
         new_pos.x = WIN_WIDTH;
+        reposition_needed = sfTrue;
     }
     if(pos.y > WIN_HEIGHT)
     {
         new_pos.y = 0;
+        reposition_needed = sfTrue;
     } 
     else if(pos.y < 0)
     {
         new_pos.y = WIN_HEIGHT;
+        reposition_needed = sfTrue;
     }
-    if(new_pos.x != pos.x && new_pos.y != pos.y)
+    if(reposition_needed)
     {
         sfCircleShape_setPosition(body->shape, new_pos);
     }
+    trail_append(&body->trail, new_pos.x, new_pos.y);
 }
 
 void body_handle_collision(Body *a, Body *b, Body *bodies)
@@ -97,15 +102,15 @@ void body_apply_force(Body *body, float x, float y)
     vec2_add(body->acc, body->acc, force);
 }
 
-void body_apply_mass(Body *body, float mass)
+void body_apply_mass(Body *body, sfUint32 mass)
 {
     body->mass = mass;
-    const float radius = mass / 15;
+    const float radius = mass / 15.f;
     sfCircleShape_setRadius(body->shape, radius);
     const sfVector2f origin = {radius, radius};
     sfCircleShape_setOrigin(body->shape, origin);
     char info_string[32];
-    sprintf(info_string, "Mass: %.2f", mass);
+    sprintf(info_string, "Mass: %d", mass);
     sfText_setString(body->info_text, info_string);
 }
 
@@ -128,11 +133,12 @@ void body_get_position(Body *body, mfloat_t *result)
 
 void body_render(Display *display, Body *body)
 {
-    // const sfVector2f pos = sfCircleShape_getPosition(body->shape);
-    // if(pos.x > WIN_WIDTH || pos.x < 0 || pos.y > WIN_HEIGHT || pos.y < 0) // Body is out of window
-    // {
-    //     return;
-    // }
+    const sfVector2f pos = sfCircleShape_getPosition(body->shape);
+    if(pos.x > WIN_WIDTH || pos.x < 0 || pos.y > WIN_HEIGHT || pos.y < 0) // Body is out of window
+    {
+        return;
+    }
+    trail_render(display, &body->trail);
     sfRenderWindow_drawCircleShape(display->render_window, body->shape, NULL);
     const sfVector2i mouse_pos = sfMouse_getPosition(display->render_window);
     const sfFloatRect bounds = sfCircleShape_getGlobalBounds(body->shape);
@@ -140,15 +146,12 @@ void body_render(Display *display, Body *body)
     {
         sfRenderWindow_drawText(display->render_window, body->info_text, NULL);
     }
-    //sfRenderWindow_drawCircleShape(display->render_window, body->debug_shape, NULL);
 }
 
-Body* body_create(Display *display, Body *bodies, float x, float y, float mass)
+Body* body_create(Display *display, Body *bodies, float x, float y, sfUint32 mass)
 {
     static sfUint32 last_id = 0;
-    //sfCircleShape *shape = NULL;
     Body *body = NULL;
-    //sfCircleShape *debug_shape = NULL;
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(bodies[i].shape == NULL)
@@ -170,23 +173,21 @@ Body* body_create(Display *display, Body *bodies, float x, float y, float mass)
         return NULL;
     }
     const sfVector2f pos = {x, y};
-    const sfVector2f origin = {mass / 2, mass / 2};
+    const sfVector2f origin = {mass / 2.f, mass / 2.f};
     sfCircleShape_setOrigin(body->shape, origin);
     sfCircleShape_setPosition(body->shape, pos);
-    sfCircleShape_setFillColor(body->shape, sfWhite);
+    const sfUint8 red = sim_random_uint(0, 255);
+    const sfUint8 green = sim_random_uint(0, 255);
+    const sfUint8 blue = sim_random_uint(0, 255);
+    sfCircleShape_setFillColor(body->shape, sfColor_fromRGB(red, green, blue));
     sfText_setPosition(body->info_text, pos);
     sfText_setOrigin(body->info_text, origin);
     sfText_setFont(body->info_text, display->font);
     sfText_setColor(body->info_text, sfRed);
     char info_string[32] = { 0 };
-    sprintf(info_string, "Mass: .2%f", mass);
+    sprintf(info_string, "Mass: %d", mass);
     sfText_setString(body->info_text, info_string);
     return body;
-    // Debug
-    // const sfVector2f debug_pos = {x - 1, y - 1};
-    // sfCircleShape_setPosition(debug_shape, debug_pos);
-    // sfCircleShape_setFillColor(debug_shape, sfRed);
-    // sfCircleShape_setRadius(debug_shape, 2);
 }
 
 void body_destroy(Body *body, Body *bodies)
@@ -199,7 +200,6 @@ void body_destroy(Body *body, Body *bodies)
             bodies[i].shape = NULL;
             sfText_destroy(bodies[i].info_text);
             bodies[i].info_text = NULL;
-            printf("Body destroyed!\n");
             break;
         }
     }

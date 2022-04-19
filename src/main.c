@@ -35,8 +35,16 @@ inline void initialize(Sim *sim)
 {
     sim->delta_clock = sfClock_create();
     display_init(&sim->display);
-    sim_create_random_distribution(sim, 1000);
-    sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 300, 100);
+
+    sim->fps_text = sfText_create();
+    sfText_setFont(sim->fps_text, sim->display.font);
+    sfText_setColor(sim->fps_text, sfRed);
+    const sfVector2f scale = {0.5f, 0.5f};
+    const sfVector2f pos = {0, 0};
+    sfText_setPosition(sim->fps_text, pos);
+    sfText_setScale(sim->fps_text, scale);
+
+    sim_create_random_distribution(sim, 1500);
 }
 
 void update(Sim *sim)
@@ -49,6 +57,9 @@ void update(Sim *sim)
             body_update(&sim->bodies[i], sim->bodies, sfTime_asSeconds(sim->delta_time));
         }
     }
+    char fps_string[16];
+    sprintf(fps_string, "FPS %.2f", 1 / sfTime_asSeconds(sim->delta_time));
+    sfText_setString(sim->fps_text, fps_string);
 }
 
 void render(Sim *sim)
@@ -59,9 +70,10 @@ void render(Sim *sim)
     {
         if(sim->bodies[i].shape != NULL)
         {
-            body_render(&sim->display, &sim->bodies[i]);  
+            body_render(&sim->display, &sim->bodies[i]);
         }
     }
+    sfRenderWindow_drawText(sim->display.render_window, sim->fps_text, NULL);
     // Stop rendering
     sfRenderWindow_display(sim->display.render_window);
 }
