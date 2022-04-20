@@ -2,7 +2,7 @@
 #include "display.h"
 #include "body.h"
 #define MAX_BODIES 2048
-#define GRAVITATIONAL_CONSTANT 10
+#define GRAVITATIONAL_CONSTANT 125
 
 typedef struct {
     sfClock *delta_clock;
@@ -23,5 +23,5 @@ void sim_create_grid(Sim *sim, sfUint32 count, float spacing);
 void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spacing);
 void sim_create_random_distribution(Sim *sim, sfUint32 count);
 sfUint32 sim_random_uint(sfUint32 min, sfUint32 max);
-void sim_random_vector(mfloat_t *result, float max_length);
+void sim_random_vector(mfloat_t *result, float min_length, float max_length);
 void sim_poll_events(Sim *sim);

@@ -2,7 +2,8 @@
 #include "mathc.h"
 #include "display.h"
 #include "trail.h"
-#define BODY_DEFAULT_MASS 4
+#define BODY_DEFAULT_MASS 1
+#define BODY_RADIUS_FACTOR 30.f
 #define BODY_SPEED_LIMIT 5 // Pixels per second
 
 typedef struct {
@@ -18,7 +19,7 @@ typedef struct {
 
 Body* body_create(Display *display, Body *bodies, float x, float y, sfUint32 mass);
 void body_destroy(Body *body, Body *bodies);
-void body_update(Body *body, Body *bodies, float delta_time);
+void body_update(Display *display, Body *body, Body *bodies, float delta_time);
 void body_handle_collision(Body *a, Body *b, Body *bodies);
 void body_apply_mass(Body *body, sfUint32 mass);
 void body_apply_force(Body *body, float x, float y);

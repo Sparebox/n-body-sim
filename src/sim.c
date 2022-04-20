@@ -37,7 +37,7 @@ void sim_create_circle(
         x = center_x + radius * cos(current_radians);
         y = center_y + radius * sin(current_radians);
         body = body_create(&sim->display, sim->bodies, x, y, BODY_DEFAULT_MASS);
-        sim_random_vector(rng_vel, 1);
+        sim_random_vector(rng_vel, 0, 1);
         vec2_assign(body->vel, rng_vel);
         current_radians += offset_radians;
     }
@@ -91,7 +91,7 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
     for(size_t i = 0; i < count; i++)
     {
         body = body_create(&sim->display, sim->bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
-        sim_random_vector(rng_vel, 1);
+        sim_random_vector(rng_vel, 0, 1);
         vec2_assign(body->vel, rng_vel);
         pos[0] = sim_random_uint(10, WIN_WIDTH - 10);
         pos[1] = sim_random_uint(10, WIN_HEIGHT - 10);
@@ -103,11 +103,11 @@ sfUint32 sim_random_uint(sfUint32 min, sfUint32 max)
     return rand() % (max - min + 1) + min;
 }
 
-void sim_random_vector(mfloat_t *result, float max_length)
+void sim_random_vector(mfloat_t *result, float min_length, float max_length)
 {
     vec2_one(result);
     vec2_rotate(result, result, sim_random_uint(0, 2 * M_PI));
-    vec2_multiply_f(result, result, sim_random_uint(0, max_length));
+    vec2_multiply_f(result, result, sim_random_uint(min_length, max_length));
 }
 
 void sim_destroy(Sim *sim)

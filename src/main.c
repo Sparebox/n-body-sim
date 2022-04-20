@@ -4,8 +4,6 @@
 #include "display.h"
 #include "sim.h"
 
-#define NUM_OF_BODIES 100
- 
 void initialize(Sim *sim);
 void render(Sim *sim);
 void update(Sim *sim);
@@ -31,7 +29,7 @@ int main()
     return EXIT_SUCCESS;
 }
 
-inline void initialize(Sim *sim) 
+void initialize(Sim *sim) 
 {
     sim->delta_clock = sfClock_create();
     display_init(&sim->display);
@@ -54,7 +52,7 @@ void update(Sim *sim)
     {
         if(sim->bodies[i].shape != NULL)
         {
-            body_update(&sim->bodies[i], sim->bodies, sfTime_asSeconds(sim->delta_time));
+            body_update(&sim->display, &sim->bodies[i], sim->bodies, sfTime_asSeconds(sim->delta_time));
         }
     }
     char fps_string[16];

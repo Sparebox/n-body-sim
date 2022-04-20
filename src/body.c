@@ -4,7 +4,7 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-void body_update(Body *body, Body *bodies, float delta_time)
+void body_update(Display *display, Body *body, Body *bodies, float delta_time)
 {
     // Gravity
     for(size_t i = 0; i < MAX_BODIES; i++)
@@ -76,8 +76,6 @@ void body_update(Body *body, Body *bodies, float delta_time)
 
 void body_handle_collision(Body *a, Body *b, Body *bodies)
 {
-    mfloat_t a_pos[VEC2_SIZE];
-    mfloat_t b_pos[VEC2_SIZE];
     mfloat_t mv_a[VEC2_SIZE];
     mfloat_t mv_b[VEC2_SIZE];
     vec2_assign(mv_a, a->vel);
@@ -87,8 +85,6 @@ void body_handle_collision(Body *a, Body *b, Body *bodies)
     mfloat_t new_vel[VEC2_SIZE];
     vec2_add(new_vel, mv_a, mv_b);
     vec2_divide_f(new_vel, new_vel, a->mass + b->mass);
-    body_get_position(a, a_pos);
-    body_get_position(b, b_pos);
     Body *survivor = a->mass > b->mass ? a : b;
     vec2_assign(survivor->vel, new_vel);
     body_apply_mass(survivor, a->mass + b->mass);
@@ -105,7 +101,7 @@ void body_apply_force(Body *body, float x, float y)
 void body_apply_mass(Body *body, sfUint32 mass)
 {
     body->mass = mass;
-    const float radius = mass / 15.f;
+    const float radius = mass / BODY_RADIUS_FACTOR;
     sfCircleShape_setRadius(body->shape, radius);
     const sfVector2f origin = {radius, radius};
     sfCircleShape_setOrigin(body->shape, origin);
@@ -138,7 +134,10 @@ void body_render(Display *display, Body *body)
     {
         return;
     }
-    trail_render(display, &body->trail);
+    //if(body->mass > 1)
+    //{
+        trail_render(display, &body->trail);
+    //}
     sfRenderWindow_drawCircleShape(display->render_window, body->shape, NULL);
     const sfVector2i mouse_pos = sfMouse_getPosition(display->render_window);
     const sfFloatRect bounds = sfCircleShape_getGlobalBounds(body->shape);
