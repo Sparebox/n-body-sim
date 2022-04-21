@@ -4,77 +4,57 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-void body_update(Display *display, Body *body, Body *bodies, float delta_time)
+void body_update(Display *display, Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_time)
 {
     // Gravity
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(bodies[i].id != body->id && bodies[i].shape != NULL)
         {
-            const float force = body_calculate_gravitation_force(body, &bodies[i]);
             mfloat_t pos_a[VEC2_SIZE];
             mfloat_t pos_b[VEC2_SIZE];
             body_get_position(body, pos_a);
             body_get_position(&bodies[i], pos_b);
+            float distance2 = vec2_distance_squared(pos_a, pos_b);
+            if(body->mass < BODY_RADIUS_FACTOR && bodies[i].mass < BODY_RADIUS_FACTOR && distance2 > 100 * 100)
+            {
+                continue;
+            }
             float radius_a = sfCircleShape_getRadius(body->shape);
             float radius_b = sfCircleShape_getRadius(bodies[i].shape);
-            if(vec2_distance(pos_a, pos_b) < radius_a + radius_b)
+            if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                body_handle_collision(body, &bodies[i], bodies);
+                body_handle_collision(body, &bodies[i], bodies, num_of_bodies);
                 return;
             }
+            const float force = body_calculate_gravitation_force(body, &bodies[i]);
             mfloat_t dir[VEC2_SIZE];
             vec2_subtract(dir, pos_b, pos_a);
             vec2_normalize(dir, dir);
             vec2_multiply_f(dir, dir, force);
-            body_apply_force(body, dir[0], dir[1]);
+            body_apply_force(body, dir);
         }
     }
     //
+    const sfVector2f pos = sfCircleShape_getPosition(body->shape);
+    trail_append(&body->trail, pos.x, pos.y);
+
+    // Integration
     vec2_multiply_f(body->acc, body->acc, delta_time);
     vec2_add(body->vel, body->vel, body->acc);
-    // Limit speed
+    vec2_zero(body->acc);
+    //Limit speed
     if(vec2_length(body->vel) > BODY_SPEED_LIMIT)
     {
         vec2_normalize(body->vel, body->vel);
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
     }
-    vec2_zero(body->acc);
-    const sfVector2f offset = {body->vel[0], body->vel[1]};
+    const sfVector2f offset = {body->vel[0] * delta_time, body->vel[1] * delta_time};
     sfCircleShape_move(body->shape, offset);
     sfText_move(body->info_text, offset);
-
-    const sfVector2f pos = sfCircleShape_getPosition(body->shape);
-    sfVector2f new_pos = pos;
-    sfBool reposition_needed = sfFalse;
-    if(pos.x > WIN_WIDTH)
-    {
-        new_pos.x = 0;
-        reposition_needed = sfTrue;
-    }
-    else if(pos.x < 0)
-    {
-        new_pos.x = WIN_WIDTH;
-        reposition_needed = sfTrue;
-    }
-    if(pos.y > WIN_HEIGHT)
-    {
-        new_pos.y = 0;
-        reposition_needed = sfTrue;
-    } 
-    else if(pos.y < 0)
-    {
-        new_pos.y = WIN_HEIGHT;
-        reposition_needed = sfTrue;
-    }
-    if(reposition_needed)
-    {
-        sfCircleShape_setPosition(body->shape, new_pos);
-    }
-    trail_append(&body->trail, new_pos.x, new_pos.y);
 }
 
-void body_handle_collision(Body *a, Body *b, Body *bodies)
+void body_handle_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
 {
     mfloat_t mv_a[VEC2_SIZE];
     mfloat_t mv_b[VEC2_SIZE];
@@ -88,12 +68,11 @@ void body_handle_collision(Body *a, Body *b, Body *bodies)
     Body *survivor = a->mass > b->mass ? a : b;
     vec2_assign(survivor->vel, new_vel);
     body_apply_mass(survivor, a->mass + b->mass);
-    body_destroy(survivor == a ? b : a, bodies);
+    body_destroy(survivor == a ? b : a, bodies, num_of_bodies);
 }
 
-void body_apply_force(Body *body, float x, float y) 
+void body_apply_force(Body *body, mfloat_t *force) 
 {   
-    mfloat_t force[] = {x, y};
     vec2_divide_f(force, force, body->mass);
     vec2_add(body->acc, body->acc, force);
 }
@@ -129,25 +108,25 @@ void body_get_position(Body *body, mfloat_t *result)
 
 void body_render(Display *display, Body *body)
 {
-    const sfVector2f pos = sfCircleShape_getPosition(body->shape);
-    if(pos.x > WIN_WIDTH || pos.x < 0 || pos.y > WIN_HEIGHT || pos.y < 0) // Body is out of window
+    const sfVector2i screen_pos = 
+        sfRenderWindow_mapCoordsToPixel(display->render_window, sfCircleShape_getPosition(body->shape), display->view);
+    const sfVector2f view_size = sfView_getSize(display->view);
+    if(screen_pos.x > view_size.x || screen_pos.x < 0 || screen_pos.y > view_size.y || screen_pos.y < 0) // Body is out of window
     {
         return;
     }
-    //if(body->mass > 1)
-    //{
-        trail_render(display, &body->trail);
-    //}
+    trail_render(display, &body->trail);
     sfRenderWindow_drawCircleShape(display->render_window, body->shape, NULL);
-    const sfVector2i mouse_pos = sfMouse_getPosition(display->render_window);
+    const sfVector2f mouse_w_pos = 
+        sfRenderWindow_mapPixelToCoords(display->render_window, sfMouse_getPosition(display->render_window), display->view);
     const sfFloatRect bounds = sfCircleShape_getGlobalBounds(body->shape);
-    if(sfFloatRect_contains(&bounds, mouse_pos.x, mouse_pos.y))
+    if(sfFloatRect_contains(&bounds, mouse_w_pos.x, mouse_w_pos.y))
     {
         sfRenderWindow_drawText(display->render_window, body->info_text, NULL);
     }
 }
 
-Body* body_create(Display *display, Body *bodies, float x, float y, sfUint32 mass)
+Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float x, float y, sfUint32 mass)
 {
     static sfUint32 last_id = 0;
     Body *body = NULL;
@@ -172,13 +151,15 @@ Body* body_create(Display *display, Body *bodies, float x, float y, sfUint32 mas
         return NULL;
     }
     const sfVector2f pos = {x, y};
-    const sfVector2f origin = {mass / 2.f, mass / 2.f};
+    const sfVector2f origin = {mass / BODY_RADIUS_FACTOR, mass / BODY_RADIUS_FACTOR};
     sfCircleShape_setOrigin(body->shape, origin);
     sfCircleShape_setPosition(body->shape, pos);
     const sfUint8 red = sim_random_uint(0, 255);
     const sfUint8 green = sim_random_uint(0, 255);
     const sfUint8 blue = sim_random_uint(0, 255);
-    sfCircleShape_setFillColor(body->shape, sfColor_fromRGB(red, green, blue));
+    const sfColor color = sfColor_fromRGB(red, green, blue);
+    sfCircleShape_setFillColor(body->shape, color);
+    body->trail.color = color;
     sfText_setPosition(body->info_text, pos);
     sfText_setOrigin(body->info_text, origin);
     sfText_setFont(body->info_text, display->font);
@@ -186,10 +167,11 @@ Body* body_create(Display *display, Body *bodies, float x, float y, sfUint32 mas
     char info_string[32] = { 0 };
     sprintf(info_string, "Mass: %d", mass);
     sfText_setString(body->info_text, info_string);
+    (*num_of_bodies)++;
     return body;
 }
 
-void body_destroy(Body *body, Body *bodies)
+void body_destroy(Body *body, Body *bodies, sfUint32 *num_of_bodies)
 {
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
@@ -199,6 +181,7 @@ void body_destroy(Body *body, Body *bodies)
             bodies[i].shape = NULL;
             sfText_destroy(bodies[i].info_text);
             bodies[i].info_text = NULL;
+            (*num_of_bodies)--;
             break;
         }
     }

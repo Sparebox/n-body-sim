@@ -12,9 +12,9 @@
 typedef struct {
     sfRenderWindow *render_window;
     sfView *view;
+    sfView *gui_view;
     sfVideoMode mode;
     sfFont *font;
 } Display;
 
 void display_init(Display *display);
-void display_setview(Display *display, float x1, float y1, float x2, float y2);

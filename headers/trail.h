@@ -5,6 +5,7 @@
 typedef struct {
     sfVertex vertices[MAX_VERTICES];
     sfUint32 current_index;
+    sfColor color;
 } Trail;
 
 void trail_append(Trail *trail, float x, float y);

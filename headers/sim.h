@@ -1,17 +1,24 @@
 #pragma once
 #include "display.h"
 #include "body.h"
-#define MAX_BODIES 2048
-#define GRAVITATIONAL_CONSTANT 125
+#define MAX_BODIES 4096
+#define GRAVITATIONAL_CONSTANT 1000
 
 typedef struct {
     sfClock *delta_clock;
     sfTime delta_time;
     sfText *fps_text;
+    sfText *bodies_text;
+    sfText *largest_mass_text;
     Display display;
     Body bodies[MAX_BODIES];
+    Body *largest_body;
+    sfUint32 num_of_bodies;
+    float zoom_factor;
 } Sim;
 
+void sim_init_gui(Sim *sim);
+void sim_render_gui(Sim *sim);
 void sim_destroy(Sim *sim);
 void sim_create_circle(
     Sim *sim, 

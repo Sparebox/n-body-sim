@@ -20,9 +20,9 @@ int main()
     // Game loop
     while(sfRenderWindow_isOpen(sim->display.render_window))
     {
+        sim->delta_time = sfClock_restart(sim->delta_clock);
         update(sim);
         render(sim);
-        sim->delta_time = sfClock_restart(sim->delta_clock);
     }
     // Release resources
     sim_destroy(sim);
@@ -33,37 +33,48 @@ void initialize(Sim *sim)
 {
     sim->delta_clock = sfClock_create();
     display_init(&sim->display);
-
-    sim->fps_text = sfText_create();
-    sfText_setFont(sim->fps_text, sim->display.font);
-    sfText_setColor(sim->fps_text, sfRed);
-    const sfVector2f scale = {0.5f, 0.5f};
-    const sfVector2f pos = {0, 0};
-    sfText_setPosition(sim->fps_text, pos);
-    sfText_setScale(sim->fps_text, scale);
-
-    sim_create_random_distribution(sim, 1500);
+    sim_init_gui(sim);
+    sim_create_random_distribution(sim, 1000);
 }
 
 void update(Sim *sim)
 {
     sim_poll_events(sim);
+    sfUint32 largest_mass = 0;
+    if(sim->largest_body != NULL)
+    {
+        largest_mass = sim->largest_body->mass;
+    }
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(sim->bodies[i].shape != NULL)
         {
-            body_update(&sim->display, &sim->bodies[i], sim->bodies, sfTime_asSeconds(sim->delta_time));
+            if(sim->bodies[i].mass > largest_mass)
+            {
+                sim->largest_body = &sim->bodies[i];
+                largest_mass = sim->largest_body->mass;
+            }
+            body_update(&sim->display, &sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
         }
     }
     char fps_string[16];
     sprintf(fps_string, "FPS %.2f", 1 / sfTime_asSeconds(sim->delta_time));
     sfText_setString(sim->fps_text, fps_string);
+    char bodies_string[32];
+    sprintf(bodies_string, "BODIES %d", sim->num_of_bodies);
+    sfText_setString(sim->bodies_text, bodies_string);
+    char mass_string[32];
+    sprintf(mass_string, "LARGEST MASS %d", sim->largest_body->mass);
+    sfText_setString(sim->largest_mass_text, mass_string);
 }
 
 void render(Sim *sim)
 {
     sfRenderWindow_clear(sim->display.render_window, sfBlack);
     // Start rendering
+    const sfVector2f view_center = sfCircleShape_getPosition(sim->largest_body->shape);
+    sfView_setCenter(sim->display.view, view_center);
+    sfRenderWindow_setView(sim->display.render_window, sim->display.view);
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(sim->bodies[i].shape != NULL)
@@ -71,7 +82,7 @@ void render(Sim *sim)
             body_render(&sim->display, &sim->bodies[i]);
         }
     }
-    sfRenderWindow_drawText(sim->display.render_window, sim->fps_text, NULL);
+    sim_render_gui(sim);
     // Stop rendering
     sfRenderWindow_display(sim->display.render_window);
 }

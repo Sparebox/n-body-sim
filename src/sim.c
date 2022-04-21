@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <time.h>
 #include "sim.h"
 
@@ -13,10 +14,50 @@ void sim_poll_events(Sim *sim)
             case sfEvtClosed :
                 sfRenderWindow_close(window);
                 break;
+            case sfEvtMouseWheelScrolled :
+                sim->zoom_factor = event.mouseWheelScroll.delta > 0.f ? 1.1f : 0.9f;
+                printf("Delta: %f Zoom: %f\n", event.mouseWheelScroll.delta ,sim->zoom_factor);
+                sfView_zoom(sim->display.view, sim->zoom_factor);
+                break;
             default :
                 break;
         }
     }
+}
+
+void sim_init_gui(Sim *sim)
+{
+    sim->fps_text = sfText_create();
+    sfText_setFont(sim->fps_text, sim->display.font);
+    sfText_setColor(sim->fps_text, sfWhite);
+    sfVector2f scale = {0.5f, 0.5f};
+    sfVector2f pos = {0.f, 0.f};
+    sfText_setPosition(sim->fps_text, pos);
+    sfText_setScale(sim->fps_text, scale);
+
+    sim->bodies_text = sfText_create();
+    sfText_setFont(sim->bodies_text, sim->display.font);
+    sfText_setColor(sim->bodies_text, sfWhite);
+    pos.x = 0.f;
+    pos.y = 15.f;
+    sfText_setPosition(sim->bodies_text, pos);
+    sfText_setScale(sim->bodies_text, scale);
+
+    sim->largest_mass_text = sfText_create();
+    sfText_setFont(sim->largest_mass_text, sim->display.font);
+    sfText_setColor(sim->largest_mass_text, sfWhite);
+    pos.x = 0.f;
+    pos.y = 30.f;
+    sfText_setPosition(sim->largest_mass_text, pos);
+    sfText_setScale(sim->largest_mass_text, scale);
+}
+
+void sim_render_gui(Sim *sim)
+{
+    sfRenderWindow_setView(sim->display.render_window, sim->display.gui_view);
+    sfRenderWindow_drawText(sim->display.render_window, sim->fps_text, NULL);
+    sfRenderWindow_drawText(sim->display.render_window, sim->bodies_text, NULL);
+    sfRenderWindow_drawText(sim->display.render_window, sim->largest_mass_text, NULL);
 }
 
 void sim_create_circle(
@@ -36,7 +77,7 @@ void sim_create_circle(
     {
         x = center_x + radius * cos(current_radians);
         y = center_y + radius * sin(current_radians);
-        body = body_create(&sim->display, sim->bodies, x, y, BODY_DEFAULT_MASS);
+        body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, x, y, BODY_DEFAULT_MASS);
         sim_random_vector(rng_vel, 0, 1);
         vec2_assign(body->vel, rng_vel);
         current_radians += offset_radians;
@@ -49,7 +90,7 @@ void sim_create_grid(Sim *sim, sfUint32 count, float spacing)
     float y = spacing;
     for(size_t i = 0; i < count; i++)
     {
-        body_create(&sim->display, sim->bodies, x, y, BODY_DEFAULT_MASS);
+        body_create(&sim->display, sim->bodies, &sim->num_of_bodies, x, y, BODY_DEFAULT_MASS);
         x += spacing;
         if(x > WIN_WIDTH)
         {
@@ -75,7 +116,7 @@ void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spa
     vec2_multiply_f(offset, dir, spacing);
     while(current_length < length)
     {
-        body_create(&sim->display, sim->bodies, current_pos[0], current_pos[1], BODY_DEFAULT_MASS);
+        body_create(&sim->display, sim->bodies, &sim->num_of_bodies, current_pos[0], current_pos[1], BODY_DEFAULT_MASS);
         vec2_add(current_pos, current_pos, offset);
         vec2_subtract(current_line, pos2, current_pos);
         current_length = vec2_length(current_line);
@@ -90,8 +131,8 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
     Body *body = NULL;
     for(size_t i = 0; i < count; i++)
     {
-        body = body_create(&sim->display, sim->bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
-        sim_random_vector(rng_vel, 0, 1);
+        body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
+        sim_random_vector(rng_vel, 0, 5);
         vec2_assign(body->vel, rng_vel);
         pos[0] = sim_random_uint(10, WIN_WIDTH - 10);
         pos[1] = sim_random_uint(10, WIN_HEIGHT - 10);
@@ -121,8 +162,11 @@ void sim_destroy(Sim *sim)
         }
     }
     sfText_destroy(sim->fps_text);
+    sfText_destroy(sim->bodies_text);
+    sfText_destroy(sim->largest_mass_text);
     sfClock_destroy(sim->delta_clock);
     sfView_destroy(sim->display.view);
+    sfView_destroy(sim->display.gui_view);
     sfRenderWindow_destroy(sim->display.render_window);
     free(sim);
 }
