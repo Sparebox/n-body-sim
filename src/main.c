@@ -35,14 +35,17 @@ void initialize(Sim *sim)
     display_init(&sim->display);
     sim_init_gui(sim);
     sim_create_random_distribution(sim, 1000);
-    // Body *body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y, 1000);
-    // mfloat_t init_vel[] = {5, -5};
-    // vec2_assign(body->vel, init_vel);
+    // Body *a = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y - 50, 500);
+    // mfloat_t init_vel[] = {BODY_SPEED_LIMIT, 0};
+    // vec2_assign(a->vel, init_vel);
+    // Body *b = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X + 200, WIN_CENTER_Y, 1000);
+    //sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 100, 60);
 }
 
 void update(Sim *sim)
 {
     sim_poll_events(sim);
+    display_handle_mouse_pan(&sim->display);
     sfUint32 largest_mass = 0;
     if(sim->largest_body != NULL)
     {
@@ -57,7 +60,7 @@ void update(Sim *sim)
                 sim->largest_body = &sim->bodies[i];
                 largest_mass = sim->largest_body->mass;
             }
-            body_update(&sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
+            body_update(&sim->display, &sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
         }
     }
     char fps_string[16];
@@ -75,8 +78,14 @@ void render(Sim *sim)
 {
     sfRenderWindow_clear(sim->display.render_window, sfBlack);
     // Start rendering
-    const sfVector2f view_center = sfCircleShape_getPosition(sim->largest_body->shape);
-    sfView_setCenter(sim->display.view, view_center);
+    if(sim->following_largest_body)
+    {
+        if(sim->largest_body->shape != NULL)
+        {
+            const sfVector2f view_center = sfCircleShape_getPosition(sim->largest_body->shape);
+            sfView_setCenter(sim->display.view, view_center);
+        }
+    }
     sfRenderWindow_setView(sim->display.render_window, sim->display.view);
     for(size_t i = 0; i < MAX_BODIES; i++)
     {

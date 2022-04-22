@@ -4,7 +4,7 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-void body_update(Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_time)
+void body_update(Display *display, Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_time)
 {
     // Gravity
     for(size_t i = 0; i < MAX_BODIES; i++)
@@ -24,7 +24,7 @@ void body_update(Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_
             float radius_b = sfCircleShape_getRadius(bodies[i].shape);
             if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                body_handle_collision(body, &bodies[i], bodies, num_of_bodies);
+                body_handle_collision(display, body, &bodies[i], bodies, num_of_bodies);
                 return;
             }
             const float force = body_calculate_gravitation_force(body, &bodies[i]);
@@ -44,7 +44,7 @@ void body_update(Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_
     vec2_add(body->vel, body->vel, body->acc);
     vec2_zero(body->acc);
     //Limit speed
-    if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT)
+    if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
     {
         vec2_normalize(body->vel, body->vel);
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
@@ -54,21 +54,100 @@ void body_update(Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_
     sfText_move(body->info_text, offset);
 }
 
-void body_handle_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
+void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
 {
-    mfloat_t mv_a[VEC2_SIZE];
-    mfloat_t mv_b[VEC2_SIZE];
-    vec2_assign(mv_a, a->vel);
-    vec2_assign(mv_b, b->vel);
-    vec2_multiply_f(mv_a, mv_a, a->mass);
-    vec2_multiply_f(mv_b, mv_b, b->mass);
-    mfloat_t new_vel[VEC2_SIZE];
-    vec2_add(new_vel, mv_a, mv_b);
-    vec2_divide_f(new_vel, new_vel, a->mass + b->mass);
-    Body *survivor = a->mass > b->mass ? a : b;
-    vec2_assign(survivor->vel, new_vel);
-    body_apply_mass(survivor, a->mass + b->mass);
-    body_destroy(survivor == a ? b : a, bodies, num_of_bodies);
+    float a_vel2 = vec2_length_squared(a->vel);
+    float b_vel2 = vec2_length_squared(b->vel);
+    mfloat_t impact_dir[VEC2_SIZE];
+    mfloat_t a_pos[VEC2_SIZE];
+    mfloat_t b_pos[VEC2_SIZE];
+    body_get_position(a, a_pos);
+    body_get_position(b, b_pos);
+    vec2_subtract(impact_dir, a_pos, b_pos);
+    vec2_normalize(impact_dir, impact_dir);
+    if(a_vel2 == BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && b->mass > a->mass) // Body b is going to split
+    {
+        printf("B splitting!\n");
+        mfloat_t m1v1[VEC2_SIZE];
+        mfloat_t m1v2[VEC2_SIZE];
+        mfloat_t m2v2[VEC2_SIZE];
+        mfloat_t new_a_vel[VEC2_SIZE];
+        vec2_multiply_f(m1v1, b->vel, 2 * b->mass);
+        vec2_multiply_f(m1v2, a->vel, b->mass);
+        vec2_multiply_f(m2v2, a->vel, a->mass);
+        vec2_subtract(new_a_vel, m1v1, m1v2);
+        vec2_add(new_a_vel, new_a_vel, m2v2);
+        vec2_divide_f(new_a_vel, new_a_vel, a->mass + b->mass);
+
+        mfloat_t m2v1[VEC2_SIZE];
+        mfloat_t new_b_vel[VEC2_SIZE];
+        vec2_multiply_f(m2v1, b->vel, a->mass);
+        vec2_subtract(new_b_vel, m1v1, m2v1);
+        vec2_multiply_f(m2v2, m2v2, 2);
+        vec2_add(new_b_vel, new_b_vel, m2v2);
+        vec2_divide_f(new_b_vel, new_b_vel, a->mass + b->mass);
+
+        vec2_assign(a->vel, new_a_vel);
+
+        const sfVector2f b_pos = sfCircleShape_getPosition(b->shape);
+        vec2_rotate(impact_dir, impact_dir, MPI_2);
+        vec2_multiply_f(impact_dir, impact_dir, 2 * sfCircleShape_getRadius(b->shape));
+        body_destroy(b, bodies, num_of_bodies);
+        Body *new1 = body_create(display, bodies, num_of_bodies, b_pos.x + impact_dir[0], b_pos.y + impact_dir[1], b->mass / 2);
+        vec2_assign(new1->vel, new_b_vel);
+        vec2_rotate(impact_dir, impact_dir, MPI);
+        Body *new2 = body_create(display, bodies, num_of_bodies, b_pos.x + impact_dir[0], b_pos.y + impact_dir[1], b->mass / 2);
+        vec2_assign(new2->vel, new_b_vel);
+    }
+    else if(b_vel2 == BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && a->mass > b->mass) // Body a is going to split
+    {
+        mfloat_t m1v1[VEC2_SIZE];
+        mfloat_t m1v2[VEC2_SIZE];
+        mfloat_t m2v2[VEC2_SIZE];
+        mfloat_t new_a_vel[VEC2_SIZE];
+        vec2_multiply_f(m1v1, a->vel, 2 * a->mass);
+        vec2_multiply_f(m1v2, b->vel, a->mass);
+        vec2_multiply_f(m2v2, b->vel, b->mass);
+        vec2_subtract(new_a_vel, m1v1, m1v2);
+        vec2_add(new_a_vel, new_a_vel, m2v2);
+        vec2_divide_f(new_a_vel, new_a_vel, a->mass + b->mass);
+
+        mfloat_t m2v1[VEC2_SIZE];
+        mfloat_t new_b_vel[VEC2_SIZE];
+        vec2_multiply_f(m2v1, a->vel, b->mass);
+        vec2_subtract(new_b_vel, m1v1, m2v1);
+        vec2_multiply_f(m2v2, m2v2, 2);
+        vec2_add(new_b_vel, new_b_vel, m2v2);
+        vec2_divide_f(new_b_vel, new_b_vel, a->mass + b->mass);
+
+        vec2_assign(b->vel, new_b_vel);
+
+        const sfVector2f a_pos = sfCircleShape_getPosition(a->shape);
+        vec2_rotate(impact_dir, impact_dir, MPI_2);
+        vec2_multiply_f(impact_dir, impact_dir, 2 * sfCircleShape_getRadius(a->shape));
+        body_destroy(a, bodies, num_of_bodies);
+        Body *new1 = body_create(display, bodies, num_of_bodies, a_pos.x + impact_dir[0], a_pos.y + impact_dir[1], a->mass / 2);
+        vec2_assign(new1->vel, new_a_vel);
+        vec2_rotate(impact_dir, impact_dir, MPI);
+        Body *new2 = body_create(display, bodies, num_of_bodies, a_pos.x + impact_dir[0], a_pos.y + impact_dir[1], a->mass / 2);
+        vec2_assign(new2->vel, new_a_vel);
+    }
+    else
+    {
+        Body *survivor = a->mass > b->mass ? a : b;
+        mfloat_t mv_a[VEC2_SIZE];
+        mfloat_t mv_b[VEC2_SIZE];
+        vec2_assign(mv_a, a->vel);
+        vec2_assign(mv_b, b->vel);
+        vec2_multiply_f(mv_a, mv_a, a->mass);
+        vec2_multiply_f(mv_b, mv_b, b->mass);
+        mfloat_t new_vel[VEC2_SIZE];
+        vec2_add(new_vel, mv_a, mv_b);
+        vec2_divide_f(new_vel, new_vel, a->mass + b->mass);
+        vec2_assign(survivor->vel, new_vel);
+        body_apply_mass(survivor, a->mass + b->mass);
+        body_destroy(survivor == a ? b : a, bodies, num_of_bodies);
+    }
 }
 
 void body_apply_force(Body *body, mfloat_t *force) 
@@ -123,7 +202,7 @@ void body_render(Display *display, Body *body)
     trail_render(display, &body->trail);
     sfRenderWindow_drawCircleShape(display->render_window, body->shape, NULL);
     const sfVector2f mouse_w_pos = 
-        sfRenderWindow_mapPixelToCoords(display->render_window, sfMouse_getPosition(display->render_window), display->view);
+        sfRenderWindow_mapPixelToCoords(display->render_window, sfMouse_getPositionRenderWindow(display->render_window), display->view);
     const sfFloatRect bounds = sfCircleShape_getGlobalBounds(body->shape);
     if(sfFloatRect_contains(&bounds, mouse_w_pos.x, mouse_w_pos.y))
     {

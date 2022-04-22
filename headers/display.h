@@ -7,6 +7,7 @@
 #define WIN_HEIGHT 1080
 #define WIN_CENTER_X WIN_WIDTH / 2
 #define WIN_CENTER_Y WIN_HEIGHT / 2
+#define MOUSE_PAN_SPEED 2
 #define FPS 60
 
 typedef struct {
@@ -15,6 +16,9 @@ typedef struct {
     sfView *gui_view;
     sfVideoMode mode;
     sfFont *font;
+    sfVector2i last_mouse_pos;
+    float zoom_level;
 } Display;
 
 void display_init(Display *display);
+void display_handle_mouse_pan(Display *display);

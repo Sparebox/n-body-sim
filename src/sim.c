@@ -7,6 +7,7 @@ void sim_poll_events(Sim *sim)
 {
     sfEvent event;
     sfRenderWindow *window = sim->display.render_window;
+    Display *display = &sim->display;
     while(sfRenderWindow_pollEvent(window, &event)) 
     {
         switch(event.type) 
@@ -15,7 +16,19 @@ void sim_poll_events(Sim *sim)
                 sfRenderWindow_close(window);
                 break;
             case sfEvtMouseWheelScrolled :
-                sfView_zoom(sim->display.view, event.mouseWheelScroll.delta > 0.f ? 1.1f : 0.9f);
+                display->zoom_level = event.mouseWheelScroll.delta > 0.f ? display->zoom_level + 0.1f : display->zoom_level - 0.1f;
+                const sfVector2f new_size = {WIN_WIDTH * display->zoom_level, WIN_HEIGHT * display->zoom_level};
+                sfView_setSize(display->view, new_size);
+                break;
+            case sfEvtMouseButtonPressed :
+                if(event.mouseButton.button == sfMouseLeft)
+                {
+                    display->last_mouse_pos = sfMouse_getPositionRenderWindow(window);
+                }
+                else if(event.mouseButton.button == sfMouseRight)
+                {
+                    sim->following_largest_body = !sim->following_largest_body;
+                }
                 break;
             case sfEvtKeyPressed :
                 if(event.key.code == sfKeyEscape)
@@ -82,7 +95,7 @@ void sim_create_circle(
         x = center_x + radius * cos(current_radians);
         y = center_y + radius * sin(current_radians);
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, x, y, BODY_DEFAULT_MASS);
-        sim_random_vector(rng_vel, 0, 1);
+        sim_random_vector(rng_vel, BODY_SPEED_LIMIT, BODY_SPEED_LIMIT);
         vec2_assign(body->vel, rng_vel);
         current_radians += offset_radians;
     }
@@ -138,8 +151,8 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
         sim_random_vector(rng_vel, 0, 1);
         vec2_assign(body->vel, rng_vel);
-        pos[0] = sim_random_uint(10, WIN_WIDTH - 10);
-        pos[1] = sim_random_uint(10, WIN_HEIGHT - 10);
+        pos[0] = sim_random_uint(0, 5000);
+        pos[1] = sim_random_uint(0, 5000);
     }
 }
 
@@ -148,10 +161,16 @@ sfUint32 sim_random_uint(sfUint32 min, sfUint32 max)
     return rand() % (max - min + 1) + min;
 }
 
+float sim_random_float(float min, float max)
+{
+    float random = ((float) rand() / (float) RAND_MAX) * max;
+    return random < min ? min : random;
+}
+
 void sim_random_vector(mfloat_t *result, float min_length, float max_length)
 {
     vec2_one(result);
-    vec2_rotate(result, result, sim_random_uint(0, 2 * M_PI));
+    vec2_rotate(result, result, sim_random_float(0.f, 2 * M_PI));
     vec2_multiply_f(result, result, sim_random_uint(min_length, max_length));
 }
 
