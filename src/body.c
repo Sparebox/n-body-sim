@@ -4,7 +4,7 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-void body_update(Display *display, Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_time)
+void body_update(Body *body, Body *bodies, sfUint32 *num_of_bodies, float delta_time)
 {
     // Gravity
     for(size_t i = 0; i < MAX_BODIES; i++)
@@ -16,7 +16,7 @@ void body_update(Display *display, Body *body, Body *bodies, sfUint32 *num_of_bo
             body_get_position(body, pos_a);
             body_get_position(&bodies[i], pos_b);
             float distance2 = vec2_distance_squared(pos_a, pos_b);
-            if(body->mass < BODY_RADIUS_FACTOR && bodies[i].mass < BODY_RADIUS_FACTOR && distance2 > 100 * 100)
+            if(body->mass < BODY_RADIUS_FACTOR && bodies[i].mass < BODY_RADIUS_FACTOR && distance2 > 300 * 300)
             {
                 continue;
             }
@@ -44,7 +44,7 @@ void body_update(Display *display, Body *body, Body *bodies, sfUint32 *num_of_bo
     vec2_add(body->vel, body->vel, body->acc);
     vec2_zero(body->acc);
     //Limit speed
-    if(vec2_length(body->vel) > BODY_SPEED_LIMIT)
+    if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT)
     {
         vec2_normalize(body->vel, body->vel);
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
@@ -84,9 +84,14 @@ void body_apply_mass(Body *body, sfUint32 mass)
     sfCircleShape_setRadius(body->shape, radius);
     const sfVector2f origin = {radius, radius};
     sfCircleShape_setOrigin(body->shape, origin);
+    // Info text
     char info_string[32];
     sprintf(info_string, "Mass: %d", mass);
     sfText_setString(body->info_text, info_string);
+    const sfFloatRect bounds = sfText_getGlobalBounds(body->info_text);
+    sfVector2f pos = sfCircleShape_getPosition(body->shape);
+    pos.x -= bounds.width / 2;
+    sfText_setPosition(body->info_text, pos);
 }
 
 float body_calculate_gravitation_force(Body *a, Body *b)
@@ -110,8 +115,8 @@ void body_render(Display *display, Body *body)
 {
     const sfVector2i screen_pos = 
         sfRenderWindow_mapCoordsToPixel(display->render_window, sfCircleShape_getPosition(body->shape), display->view);
-    const sfVector2f view_size = sfView_getSize(display->view);
-    if(screen_pos.x > view_size.x || screen_pos.x < 0 || screen_pos.y > view_size.y || screen_pos.y < 0) // Body is out of window
+    const sfIntRect viewport = {0, 0, WIN_WIDTH, WIN_HEIGHT};
+    if(!sfIntRect_contains(&viewport, screen_pos.x, screen_pos.y)) // Body is not in window
     {
         return;
     }
@@ -128,7 +133,7 @@ void body_render(Display *display, Body *body)
 
 Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float x, float y, sfUint32 mass)
 {
-    static sfUint32 last_id = 0;
+    static sfUint32 last_body_id = 0;
     Body *body = NULL;
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
@@ -137,11 +142,11 @@ Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float
             bodies[i].shape = sfCircleShape_create();
             bodies[i].info_text = sfText_create();
             body = &bodies[i];
-            body->id = last_id;
+            body->id = last_body_id;
             vec2_zero(body->vel);
             vec2_zero(body->acc);
             body_apply_mass(body, mass);
-            last_id++;
+            last_body_id++;
             break;
         }
     }

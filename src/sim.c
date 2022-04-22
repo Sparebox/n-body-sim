@@ -15,9 +15,13 @@ void sim_poll_events(Sim *sim)
                 sfRenderWindow_close(window);
                 break;
             case sfEvtMouseWheelScrolled :
-                sim->zoom_factor = event.mouseWheelScroll.delta > 0.f ? 1.1f : 0.9f;
-                printf("Delta: %f Zoom: %f\n", event.mouseWheelScroll.delta ,sim->zoom_factor);
-                sfView_zoom(sim->display.view, sim->zoom_factor);
+                sfView_zoom(sim->display.view, event.mouseWheelScroll.delta > 0.f ? 1.1f : 0.9f);
+                break;
+            case sfEvtKeyPressed :
+                if(event.key.code == sfKeyEscape)
+                {
+                    sfRenderWindow_close(window);
+                }
                 break;
             default :
                 break;
@@ -132,7 +136,7 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count)
     for(size_t i = 0; i < count; i++)
     {
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
-        sim_random_vector(rng_vel, 0, 5);
+        sim_random_vector(rng_vel, 0, 1);
         vec2_assign(body->vel, rng_vel);
         pos[0] = sim_random_uint(10, WIN_WIDTH - 10);
         pos[1] = sim_random_uint(10, WIN_HEIGHT - 10);

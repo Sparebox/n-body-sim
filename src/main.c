@@ -35,6 +35,9 @@ void initialize(Sim *sim)
     display_init(&sim->display);
     sim_init_gui(sim);
     sim_create_random_distribution(sim, 1000);
+    // Body *body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y, 1000);
+    // mfloat_t init_vel[] = {5, -5};
+    // vec2_assign(body->vel, init_vel);
 }
 
 void update(Sim *sim)
@@ -54,11 +57,11 @@ void update(Sim *sim)
                 sim->largest_body = &sim->bodies[i];
                 largest_mass = sim->largest_body->mass;
             }
-            body_update(&sim->display, &sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
+            body_update(&sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
         }
     }
     char fps_string[16];
-    sprintf(fps_string, "FPS %.2f", 1 / sfTime_asSeconds(sim->delta_time));
+    sprintf(fps_string, "FPS %.1f", 1 / sfTime_asSeconds(sim->delta_time));
     sfText_setString(sim->fps_text, fps_string);
     char bodies_string[32];
     sprintf(bodies_string, "BODIES %d", sim->num_of_bodies);
