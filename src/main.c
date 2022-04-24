@@ -20,9 +20,9 @@ int main()
     // Game loop
     while(sfRenderWindow_isOpen(sim->display.render_window))
     {
-        sim->delta_time = sfClock_restart(sim->delta_clock);
         update(sim);
         render(sim);
+        sim->delta_time = sfClock_restart(sim->delta_clock);
     }
     // Release resources
     sim_destroy(sim);
@@ -32,14 +32,18 @@ int main()
 void initialize(Sim *sim) 
 {
     sim->delta_clock = sfClock_create();
+    sim->sim_speed_multiplier = 1;
     display_init(&sim->display);
     sim_init_gui(sim);
-    sim_create_random_distribution(sim, 1000);
-    // Body *a = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y - 50, 500);
-    // mfloat_t init_vel[] = {BODY_SPEED_LIMIT, 0};
+    sim_create_random_distribution(sim, 2000, sfTrue);
+    // Body *a = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y, 100);
+    // mfloat_t init_vel[] = {200.f, 0.f};
     // vec2_assign(a->vel, init_vel);
-    // Body *b = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X + 200, WIN_CENTER_Y, 1000);
-    //sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 100, 60);
+    //body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X + 1500, WIN_CENTER_Y + 20, 50000);
+    // init_vel[0] = -40.f;
+    // init_vel[1] = -40.f;
+    // vec2_assign(b->vel, init_vel);
+    //sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 50, 10, 1000, sfTrue);
 }
 
 void update(Sim *sim)
@@ -60,33 +64,35 @@ void update(Sim *sim)
                 sim->largest_body = &sim->bodies[i];
                 largest_mass = sim->largest_body->mass;
             }
-            body_update(&sim->display, &sim->bodies[i], sim->bodies, &sim->num_of_bodies, sfTime_asSeconds(sim->delta_time));
+            body_update(
+                &sim->display,
+                &sim->bodies[i],
+                sim->bodies,
+                &sim->num_of_bodies,
+                sfTime_asSeconds(sim->delta_time),
+                sim->sim_speed_multiplier
+            );
         }
     }
-    char fps_string[16];
-    sprintf(fps_string, "FPS %.1f", 1 / sfTime_asSeconds(sim->delta_time));
-    sfText_setString(sim->fps_text, fps_string);
-    char bodies_string[32];
-    sprintf(bodies_string, "BODIES %d", sim->num_of_bodies);
-    sfText_setString(sim->bodies_text, bodies_string);
-    char mass_string[32];
-    sprintf(mass_string, "LARGEST MASS %d", sim->largest_body->mass);
-    sfText_setString(sim->largest_mass_text, mass_string);
+    sim_update_gui(sim);
 }
 
 void render(Sim *sim)
 {
     sfRenderWindow_clear(sim->display.render_window, sfBlack);
-    // Start rendering
-    if(sim->following_largest_body)
+    // Move view
+    if(sim->following_largest_body && sim->largest_body->shape != NULL)
     {
-        if(sim->largest_body->shape != NULL)
-        {
-            const sfVector2f view_center = sfCircleShape_getPosition(sim->largest_body->shape);
-            sfView_setCenter(sim->display.view, view_center);
-        }
+        const sfVector2f largest_body_pos = sfCircleShape_getPosition(sim->largest_body->shape);
+        sfView_setCenter(sim->display.view, largest_body_pos);
+    }
+    else if(sim->following_selected_body && sim->followed_body->shape != NULL)
+    {
+        const sfVector2f followed_body_pos = sfCircleShape_getPosition(sim->followed_body->shape);
+        sfView_setCenter(sim->display.view, followed_body_pos);
     }
     sfRenderWindow_setView(sim->display.render_window, sim->display.view);
+    // Start rendering
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(sim->bodies[i].shape != NULL)

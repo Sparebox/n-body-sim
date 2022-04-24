@@ -20,6 +20,7 @@ void display_init(Display *display)
         fprintf(stderr, "Error loading font: %s", strerror(errno));
         exit(EXIT_FAILURE);
     }
+    display->zoom_level = 1.f;
 }
 
 void display_handle_mouse_pan(Display *display) 
@@ -38,7 +39,7 @@ void display_handle_mouse_pan(Display *display)
     last_mouse_pos[1] = display->last_mouse_pos.y;
     display->last_mouse_pos = pos;
     vec2_subtract(diff, last_mouse_pos, mouse_pos);
-    vec2_multiply_f(diff, diff, MOUSE_PAN_SPEED);
+    vec2_multiply_f(diff, diff, display->zoom_level);
     const sfVector2f offset = {diff[0], diff[1]};
     sfView_move(display->view, offset);
 }
