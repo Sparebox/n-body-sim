@@ -5,14 +5,13 @@
 #define BODY_DEFAULT_MASS 100
 #define BODY_RADIUS_FACTOR 100.f
 #define BODY_SPEED_LIMIT 400.f // Pixels per second
-#define BODY_SPLIT_VELOCITY 200.f // Speed at which bodies split on impact
+#define BODY_SPLIT_VELOCITY 100.f // Speed at which bodies split on impact
 
 typedef struct {
     mfloat_t vel[VEC2_SIZE];
     mfloat_t acc[VEC2_SIZE];
     Trail trail;
     sfUint32 mass;
-    sfUint32 id;
     sfCircleShape *shape;
     sfText *info_text;
 } Body;
@@ -27,7 +26,21 @@ void body_update(
     float delta_time,
     sfUint8 sim_speed_multiplier
     );
-void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies);
+int body_compare_x_axis(const void *a, const void *b);
+void body_sweep_and_prune(Body *bodies, Body **possible_collisions);
+void body_handle_collision(
+    Display *display,
+    Body *a,
+    Body *b,
+    Body *bodies,
+    sfUint32 *num_of_bodies
+    );
+sfBool body_check_collisions(
+    Display *display,
+    Body **possible_collisions,
+    Body *bodies,
+    sfUint32 *num_of_bodies
+    );
 void body_apply_mass(Body *body, sfUint32 mass);
 void body_apply_force(Body *body, mfloat_t *force);
 void body_calculate_gravitation_force(mfloat_t *result, Body *a, Body *b, float dist2);
