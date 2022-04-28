@@ -2,9 +2,9 @@
 #include "mathc.h"
 #include "display.h"
 #include "trail.h"
-#define BODY_DEFAULT_MASS 100
-#define BODY_RADIUS_FACTOR 100.f
-#define BODY_SPEED_LIMIT 400.f // Pixels per second
+#define BODY_DEFAULT_MASS 200
+#define BODY_RADIUS_FACTOR 200.f
+#define BODY_SPEED_LIMIT 200.f // Pixels per second
 #define BODY_SPLIT_VELOCITY 100.f // Speed at which bodies split on impact
 
 typedef struct {
@@ -19,15 +19,13 @@ typedef struct {
 Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float x, float y, sfUint32 mass);
 void body_destroy(Body *body, Body *bodies, sfUint32 *num_of_bodies);
 void body_update(
-    Display *display,
     Body *body,
     Body *bodies,
-    sfUint32 *num_of_bodies,
     float delta_time,
     sfUint8 sim_speed_multiplier
     );
 int body_compare_x_axis(const void *a, const void *b);
-void body_sweep_and_prune(Body *bodies, Body **possible_collisions);
+sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions);
 void body_handle_collision(
     Display *display,
     Body *a,
@@ -35,7 +33,7 @@ void body_handle_collision(
     Body *bodies,
     sfUint32 *num_of_bodies
     );
-sfBool body_check_collisions(
+void body_check_collisions(
     Display *display,
     Body **possible_collisions,
     Body *bodies,

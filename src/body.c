@@ -7,10 +7,8 @@
 #include "SFML/Graphics.h"
 
 void body_update(
-    Display *display,
     Body *body,
     Body *bodies,
-    sfUint32 *num_of_bodies,
     float delta_time,
     sfUint8 sim_speed_multiplier
 )
@@ -19,8 +17,6 @@ void body_update(
     mfloat_t pos_a[VEC2_SIZE];
     mfloat_t pos_b[VEC2_SIZE];
     mfloat_t gravitation_force[VEC2_SIZE];
-    // float radius_a = 0.f;
-    // float radius_b = 0.f;
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(bodies[i].shape != NULL && bodies[i].shape != body->shape)
@@ -28,16 +24,12 @@ void body_update(
             body_get_position(body, pos_a);
             body_get_position(&bodies[i], pos_b);
             const float distance2 = vec2_distance_squared(pos_a, pos_b);
+            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD)
+            {
+                continue;
+            }
             body_calculate_gravitation_force(gravitation_force, body, &bodies[i], distance2);
             body_apply_force(body, gravitation_force);
-            // radius_a = sfCircleShape_getRadius(body->shape);
-            // radius_b = sfCircleShape_getRadius(bodies[i].shape);
-            // if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
-            // {
-            //     body_handle_collision(display, body, &bodies[i], bodies, num_of_bodies);
-            //     return;
-            // }
-
         }
     }
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
@@ -104,7 +96,7 @@ int body_compare_x_axis(const void *a, const void *b)
     return (a_pos.x - b_pos.x);
 }
 
-void body_sweep_and_prune(Body *bodies, Body **possible_collisions)
+sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
 {
     memset(possible_collisions, 0, MAX_BODIES * sizeof(NULL));
     Body *sorted_bodies[MAX_BODIES] = { 0 };
@@ -119,8 +111,8 @@ void body_sweep_and_prune(Body *bodies, Body **possible_collisions)
     Body *active_intervals[MAX_BODIES] = { 0 };
     Body *last_active = NULL;
     active_intervals[0] = sorted_bodies[0];
-    sfUint32 interval_index = 0;
-    sfUint32 possible_index = 0;
+    size_t interval_index = 0;
+    size_t possible_index = 0;
     sfFloatRect a_bounds = { 0 };
     sfFloatRect b_bounds = { 0 };
     for(size_t i = 1; i < MAX_BODIES - 1; i++)
@@ -165,6 +157,7 @@ void body_sweep_and_prune(Body *bodies, Body **possible_collisions)
             }
         }
     }
+    return (sfUint32) possible_index;
 }
 
 void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
@@ -183,6 +176,7 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
     Body *major_mass = a->mass > b->mass ? a : b; // if mass A is bigger -> split A else split B
     if(speed_diff2 > BODY_SPLIT_VELOCITY * BODY_SPLIT_VELOCITY && major_mass->mass > 1)
     {
+        printf("Split\n");
         mfloat_t m1v1[VEC2_SIZE];
         mfloat_t m1v2[VEC2_SIZE];
         mfloat_t m2v1[VEC2_SIZE];
@@ -309,7 +303,7 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
     // }
 }
 
-sfBool body_check_collisions(Display *display, Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies)
+void body_check_collisions(Display *display, Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies)
 {
     Body *a = NULL;
     Body *b = NULL;
@@ -348,7 +342,6 @@ sfBool body_check_collisions(Display *display, Body **possible_collisions, Body 
             }
         }
     }
-    return sfFalse;
 }
 
 void body_apply_force(Body *body, mfloat_t *force) 

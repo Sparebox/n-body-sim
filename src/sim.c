@@ -66,6 +66,9 @@ void sim_poll_events(Sim *sim)
                     case sfKeySubtract :
                         sim->sim_speed_multiplier = sim->sim_speed_multiplier < 2 ? 1 : sim->sim_speed_multiplier - 1;
                         break;
+                    case sfKeySpace :
+                        sim->paused = !sim->paused;
+                        break;
                     default :
                         break;
                 }
@@ -117,29 +120,47 @@ void sim_init_gui(Sim *sim)
     pos.y += 15.f;
     sfText_setPosition(sim->sim_speed_text, pos);
     sfText_setScale(sim->sim_speed_text, scale);
+
+    sim->possible_collisions_text = sfText_create();
+    sfText_setFont(sim->possible_collisions_text, sim->display.font);
+    sfText_setColor(sim->possible_collisions_text, sfWhite);
+    pos.x = 0.f;
+    pos.y += 15.f;
+    sfText_setPosition(sim->possible_collisions_text, pos);
+    sfText_setScale(sim->possible_collisions_text, scale);
+
+    sim->paused_text = sfText_create();
+    sfText_setFont(sim->paused_text, sim->display.font);
+    sfText_setColor(sim->paused_text, sfWhite);
+    pos.x = 0.f;
+    pos.y += 15.f;
+    sfText_setPosition(sim->paused_text, pos);
+    sfText_setScale(sim->paused_text, scale);
 }
 
 void sim_update_gui(Sim *sim)
 {
-    char fps_string[16];
-    sprintf(fps_string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
-    sfText_setString(sim->fps_text, fps_string);
+    char string[32];
+    sprintf(string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
+    sfText_setString(sim->fps_text, string);
 
-    char bodies_string[32];
-    sprintf(bodies_string, "BODIES %d", sim->num_of_bodies);
-    sfText_setString(sim->bodies_text, bodies_string);
+    sprintf(string, "BODIES %d", sim->num_of_bodies);
+    sfText_setString(sim->bodies_text, string);
 
-    char mass_string[32];
-    sprintf(mass_string, "LARGEST MASS %d", sim->largest_body->mass);
-    sfText_setString(sim->largest_mass_text, mass_string);
+    sprintf(string, "LARGEST MASS %d", sim->largest_body->mass);
+    sfText_setString(sim->largest_mass_text, string);
 
-    char zoom_string[16];
-    sprintf(zoom_string, "ZOOMOUT %.1f", sim->display.zoom_level);
-    sfText_setString(sim->zoom_text, zoom_string);
+    sprintf(string, "ZOOMOUT %.1f", sim->display.zoom_level);
+    sfText_setString(sim->zoom_text, string);
 
-    char speed_string[16];
-    sprintf(speed_string, "SIM SPEED %d", sim->sim_speed_multiplier);
-    sfText_setString(sim->sim_speed_text, speed_string);
+    sprintf(string, "SIM SPEED %d", sim->sim_speed_multiplier);
+    sfText_setString(sim->sim_speed_text, string);
+
+    sprintf(string, "POSSIBLE COLLISIONS %d", sim->possible_collisions);
+    sfText_setString(sim->possible_collisions_text, string);
+
+    sprintf(string, sim->paused ? "PAUSED" : "RUNNING");
+    sfText_setString(sim->paused_text, string);
 }
 
 void sim_render_gui(Sim *sim)
@@ -150,6 +171,8 @@ void sim_render_gui(Sim *sim)
     sfRenderWindow_drawText(sim->display.render_window, sim->largest_mass_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->zoom_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->sim_speed_text, NULL);
+    sfRenderWindow_drawText(sim->display.render_window, sim->possible_collisions_text, NULL);
+    sfRenderWindow_drawText(sim->display.render_window, sim->paused_text, NULL);
 }
 
 void sim_create_circle(
@@ -272,6 +295,7 @@ void sim_destroy(Sim *sim)
     sfText_destroy(sim->largest_mass_text);
     sfText_destroy(sim->zoom_text);
     sfText_destroy(sim->sim_speed_text);
+    sfText_destroy(sim->possible_collisions_text);
     sfClock_destroy(sim->delta_clock);
     sfView_destroy(sim->display.view);
     sfView_destroy(sim->display.gui_view);

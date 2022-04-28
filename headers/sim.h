@@ -14,10 +14,14 @@ typedef struct {
     sfText *largest_mass_text;
     sfText *zoom_text;
     sfText *sim_speed_text;
+    sfText *possible_collisions_text;
+    sfText *paused_text;
     sfUint32 num_of_bodies;
+    sfUint32 possible_collisions;
     sfUint8 sim_speed_multiplier;
     sfBool following_largest_body;
     sfBool following_selected_body;
+    sfBool paused;
     Display display;
     Body bodies[MAX_BODIES];
     Body *largest_body;
