@@ -4,8 +4,8 @@
 #include "trail.h"
 #define BODY_DEFAULT_MASS 200
 #define BODY_RADIUS_FACTOR 200.f
-#define BODY_SPEED_LIMIT 200.f // Pixels per second
-#define BODY_SPLIT_VELOCITY 100.f // Speed at which bodies split on impact
+#define BODY_SPEED_LIMIT 100.f // Pixels per second
+#define BODY_SPLIT_VELOCITY 50.f // Speed at which bodies split on impact
 
 typedef struct {
     mfloat_t vel[VEC2_SIZE];

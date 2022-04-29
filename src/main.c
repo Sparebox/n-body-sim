@@ -37,6 +37,13 @@ void initialize(Sim *sim)
     display_init(&sim->display);
     sim_init_gui(sim);
     sim_create_random_distribution(sim, 2000, sfTrue);
+    // Body *a = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y, 500);
+    // Body *b = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y + 240, 1000);
+    // mfloat_t init_vel[] = {30.f, 30.f};
+    // vec2_assign(a->vel, init_vel);
+    // // init_vel[0] = -12.f;
+    // // init_vel[1] = -10.f;
+    //vec2_assign(b->vel, init_vel);
     //sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 50, 10, 1000, sfTrue);
 }
 
