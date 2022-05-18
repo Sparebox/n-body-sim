@@ -7,6 +7,8 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
+void runge_kutta_integrate_vel(Body *body, mfloat_t *new_vel, float delta_time);
+
 void body_update(
     Body *body,
     Body *bodies,
@@ -37,31 +39,13 @@ void body_update(
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
     trail_append(&body->trail, pos.x, pos.y);
     // Runge Kutta 4 integration
-    mfloat_t k1[VEC2_SIZE];
-    mfloat_t k2[VEC2_SIZE];
-    mfloat_t k3[VEC2_SIZE];
-    mfloat_t k4[VEC2_SIZE];
-    mfloat_t average[VEC2_SIZE];
     mfloat_t new_vel[VEC2_SIZE];
-    vec2_add(new_vel, body->vel, body->acc);
-    vec2_multiply_f(new_vel, new_vel, delta_time);
-    vec2_assign(k1, new_vel);
-    vec2_multiply_f(k2, k1, delta_time / 2.f);
-    vec2_add(k2, new_vel, k2);
-    vec2_multiply_f(k3, k2, delta_time / 2.f);
-    vec2_add(k3, new_vel, k3);
-    vec2_multiply_f(k4, k3, delta_time);
-    vec2_add(k4, new_vel, k4);
-
-    vec2_add(average, k1, k4);
-    vec2_add(average, vec2_multiply_f(k2, k2, 2.f), vec2_multiply_f(k3, k3, 2.f));
-    vec2_multiply_f(average, average, delta_time / 6.f);
-    vec2_add(new_vel, new_vel, average);
+    runge_kutta_integrate_vel(body, new_vel, delta_time);
     //Limit speed
-    if(vec2_length_squared(new_vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
+    if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
     {
-        vec2_normalize(new_vel, new_vel);
-        vec2_multiply_f(new_vel, new_vel, BODY_SPEED_LIMIT);
+        vec2_normalize(body->vel, body->vel);
+        vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
     }
     // Move body 
     const sfVector2f offset = {
@@ -70,6 +54,28 @@ void body_update(
     };
     sfCircleShape_move(body->shape, offset);
     sfText_move(body->info_text, offset);
+}
+
+void runge_kutta_integrate_vel(Body *body, mfloat_t *new_vel, float delta_time)
+{
+    mfloat_t k1[VEC2_SIZE];
+    mfloat_t k2[VEC2_SIZE];
+    mfloat_t k3[VEC2_SIZE];
+    mfloat_t k4[VEC2_SIZE];
+
+    vec2_add(body->vel, body->vel, body->acc);
+    vec2_zero(body->acc);
+    vec2_assign(k1, body->vel);
+    vec2_multiply_f(k2, k1, delta_time / 2.f);
+    vec2_add(k2, body->vel, k2);
+    vec2_multiply_f(k3, k2, delta_time / 2.f);
+    vec2_add(k3, body->vel, k3);
+    vec2_multiply_f(k4, k3, delta_time);
+    vec2_add(k4, body->vel, k4);
+
+    vec2_add(new_vel, k1, k4);
+    vec2_add(new_vel, vec2_multiply_f(k2, k2, 2.f), vec2_multiply_f(k3, k3, 2.f));
+    vec2_multiply_f(new_vel, new_vel, delta_time / 6.f);
 }
 
 int body_compare_x_axis(const void *a, const void *b)
@@ -172,7 +178,10 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
     const float speed_diff2 = vec2_length_squared(vel_diff);
     Body *major_mass = a->mass > b->mass ? a : b; // if mass A is bigger then split A else split B
     Body *minor_mass = major_mass == a ? b : a;
-    if(speed_diff2 > BODY_SPLIT_VELOCITY * BODY_SPLIT_VELOCITY && major_mass->mass > 1)
+    if(speed_diff2 > BODY_SPLIT_VELOCITY * BODY_SPLIT_VELOCITY &&
+        major_mass->mass > 1 &&
+        abs(minor_mass->mass - major_mass->mass) < 100e3 && 
+        BODY_SPLITTING_ENABLED)
     {
         mfloat_t m1v1[VEC2_SIZE];
         mfloat_t m2v2[VEC2_SIZE];

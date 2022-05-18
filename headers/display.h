@@ -3,8 +3,8 @@
 
 #define TITLE "n-body-sim"
 #define FONT "res/fonts/F25_Bank_Printer.ttf"
-#define WIN_WIDTH 1920
-#define WIN_HEIGHT 1080
+#define WIN_WIDTH 1600
+#define WIN_HEIGHT 900
 #define WIN_CENTER_X WIN_WIDTH / 2
 #define WIN_CENTER_Y WIN_HEIGHT / 2
 #define FPS 60

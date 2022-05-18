@@ -413,7 +413,7 @@ void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spa
 void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
 {
     srand((unsigned int)time(NULL));
-    mfloat_t pos[] = {sim_random_uint(10, WIN_WIDTH - 10), sim_random_uint(10, WIN_HEIGHT - 10)};
+    mfloat_t pos[] = {sim_random_uint(0, WIN_WIDTH), sim_random_uint(0, WIN_HEIGHT)};
     mfloat_t rng_vel[VEC2_SIZE];
     Body *body = NULL;
     for(size_t i = 0; i < count; i++)
@@ -424,8 +424,8 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
             sim_random_vector(rng_vel, 0, 1);
             vec2_assign(body->vel, rng_vel);
         }
-        pos[0] = sim_random_uint(0, 5000);
-        pos[1] = sim_random_uint(0, 5000);
+        pos[0] = sim_random_uint(0, WIN_WIDTH);
+        pos[1] = sim_random_uint(0, WIN_HEIGHT);
     }
 }
 

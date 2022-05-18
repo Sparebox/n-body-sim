@@ -5,7 +5,7 @@
 #define BODY_DEFAULT_MASS 1000
 #define BODY_RADIUS_FACTOR 1000.f
 #define BODY_SPEED_LIMIT 100.f // Pixels per second
-#define BODY_SPLIT_VELOCITY 50.f // Speed at which bodies split on impact
+#define BODY_SPLIT_VELOCITY 500.f // Speed at which bodies split on impact
 
 typedef struct {
     mfloat_t vel[VEC2_SIZE];

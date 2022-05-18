@@ -3,7 +3,9 @@
 #include "body.h"
 #define MAX_BODIES 4096
 #define GRAVITATIONAL_CONSTANT 6.67e-1f
-#define VELOCITY_LIMITED 1
+#define TIMESTEP 1
+#define VELOCITY_LIMITED 0
+#define BODY_SPLITTING_ENABLED 1
 #define DISTANCE_THRESHOLD 3000.f // Maximum distance of gravitational force calculation
 
 typedef struct {
