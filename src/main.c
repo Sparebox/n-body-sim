@@ -3,6 +3,7 @@
 #include "mathc.h"
 #include "display.h"
 #include "sim.h"
+#include "editor.h"
 #include "body.h"
 
 void initialize(Sim *sim);
@@ -33,76 +34,32 @@ int main()
 void initialize(Sim *sim) 
 {
     sim->delta_clock = sfClock_create();
-    sim->sim_speed_multiplier = 1;
     display_init(&sim->display);
     sim_init_gui(sim);
-    sim_create_random_distribution(sim, 2000, sfTrue);
-    // Body *a = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y, 500);
-    // Body *b = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y + 240, 1000);
-    // mfloat_t init_vel[] = {30.f, 30.f};
-    // vec2_assign(a->vel, init_vel);
-    // // init_vel[0] = -12.f;
-    // // init_vel[1] = -10.f;
-    //vec2_assign(b->vel, init_vel);
-    //sim_create_circle(sim, WIN_CENTER_X, WIN_CENTER_Y, 50, 10, 1000, sfTrue);
+    editor_init_gui(&sim->editor, &sim->display); 
 }
 
 void update(Sim *sim)
 {
     sim_poll_events(sim);
-    display_handle_mouse_pan(&sim->display);
-    sfUint32 largest_mass = 0;
-    if(sim->largest_body != NULL)
+    display_handle_mouse_pan(&sim->display, sim->editor_enabled);
+    if(!sim->editor_enabled)
     {
-        largest_mass = sim->largest_body->mass;
+        sim_update(sim);
     }
-    for(size_t i = 0; i < MAX_BODIES; i++)
-    {
-        if(sim->bodies[i].shape != NULL && !sim->paused)
-        {
-            if(sim->bodies[i].mass > largest_mass)
-            {
-                sim->largest_body = &sim->bodies[i];
-                largest_mass = sim->largest_body->mass;
-            }
-            body_update(
-                &sim->bodies[i],
-                sim->bodies,
-                sfTime_asSeconds(sim->delta_time),
-                sim->sim_speed_multiplier
-            );
-        }
-    }
-    Body *possible_collisions[MAX_BODIES] = { 0 };
-    sim->possible_collisions = body_sweep_and_prune(sim->bodies, possible_collisions);
-    body_check_collisions(&sim->display, possible_collisions, sim->bodies, &sim->num_of_bodies);
     sim_update_gui(sim);
 }
 
 void render(Sim *sim)
 {
     sfRenderWindow_clear(sim->display.render_window, sfBlack);
-    // Move view
-    if(sim->following_largest_body && sim->largest_body->shape != NULL)
-    {
-        const sfVector2f largest_body_pos = sfCircleShape_getPosition(sim->largest_body->shape);
-        sfView_setCenter(sim->display.view, largest_body_pos);
-    }
-    else if(sim->following_selected_body && sim->followed_body->shape != NULL)
-    {
-        const sfVector2f followed_body_pos = sfCircleShape_getPosition(sim->followed_body->shape);
-        sfView_setCenter(sim->display.view, followed_body_pos);
-    }
-    sfRenderWindow_setView(sim->display.render_window, sim->display.view);
     // Start rendering
-    for(size_t i = 0; i < MAX_BODIES; i++)
+    sim_render(sim);
+    if(sim->editor_enabled)
     {
-        if(sim->bodies[i].shape != NULL)
-        {
-            body_render(&sim->display, &sim->bodies[i]);
-        }
+        editor_render_gui(&sim->editor, &sim->display);
     }
-    sim_render_gui(sim);
+    sim_render_gui(sim); 
     // Stop rendering
     sfRenderWindow_display(sim->display.render_window);
 }

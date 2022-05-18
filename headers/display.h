@@ -15,9 +15,10 @@ typedef struct {
     sfView *gui_view;
     sfVideoMode mode;
     sfFont *font;
-    sfVector2i last_mouse_pos;
+    sfVector2i last_mouse_click_pos;
+    sfBool mouse_was_on_body;
     float zoom_level;
 } Display;
 
 void display_init(Display *display);
-void display_handle_mouse_pan(Display *display);
+void display_handle_mouse_pan(Display *display, sfBool editor_enabled);

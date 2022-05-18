@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "body.h"
 #include "sim.h"
 #include "trail.h"
@@ -9,8 +10,7 @@
 void body_update(
     Body *body,
     Body *bodies,
-    float delta_time,
-    sfUint8 sim_speed_multiplier
+    float delta_time
 )
 {
     // Gravity
@@ -24,7 +24,9 @@ void body_update(
             body_get_position(body, pos_a);
             body_get_position(&bodies[i], pos_b);
             const float distance2 = vec2_distance_squared(pos_a, pos_b);
-            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD)
+            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD &&
+                body->mass < BODY_DEFAULT_MASS * 2 &&
+                bodies[i].mass < BODY_DEFAULT_MASS * 2)
             {
                 continue;
             }
@@ -34,10 +36,6 @@ void body_update(
     }
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
     trail_append(&body->trail, pos.x, pos.y);
-    // Euler method integration (old)
-    // vec2_multiply_f(body->acc, body->acc, delta_time);
-    // vec2_add(body->vel, body->vel, body->acc);
-    // vec2_zero(body->acc);
     // Runge Kutta 4 integration
     mfloat_t k1[VEC2_SIZE];
     mfloat_t k2[VEC2_SIZE];
@@ -46,7 +44,7 @@ void body_update(
     mfloat_t average[VEC2_SIZE];
     mfloat_t new_vel[VEC2_SIZE];
     vec2_add(new_vel, body->vel, body->acc);
-    vec2_multiply_f(new_vel, new_vel, delta_time * sim_speed_multiplier);
+    vec2_multiply_f(new_vel, new_vel, delta_time);
     vec2_assign(k1, new_vel);
     vec2_multiply_f(k2, k1, delta_time / 2.f);
     vec2_add(k2, new_vel, k2);
@@ -131,7 +129,7 @@ sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
             b_bounds.top = a_bounds.top;
             if(sfFloatRect_intersects(&a_bounds, &b_bounds, NULL)) // If collision is possible
             {
-                if(last_active != active_intervals[j])
+                if(last_active != active_intervals[j]) // Check for overlap
                 {
                     possible_collisions[possible_index] = active_intervals[j];
                     possible_collisions[possible_index + 1] = sorted_bodies[i];
@@ -172,11 +170,10 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
     mfloat_t vel_diff[VEC2_SIZE];
     vec2_subtract(vel_diff, a->vel, b->vel);
     const float speed_diff2 = vec2_length_squared(vel_diff);
-    Body *major_mass = a->mass > b->mass ? a : b; // if mass A is bigger -> split A else split B
+    Body *major_mass = a->mass > b->mass ? a : b; // if mass A is bigger then split A else split B
     Body *minor_mass = major_mass == a ? b : a;
     if(speed_diff2 > BODY_SPLIT_VELOCITY * BODY_SPLIT_VELOCITY && major_mass->mass > 1)
     {
-        printf("Split\n");
         mfloat_t m1v1[VEC2_SIZE];
         mfloat_t m2v2[VEC2_SIZE];
         mfloat_t new_vel[VEC2_SIZE];
@@ -216,7 +213,7 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
         body_destroy(major_mass, bodies, num_of_bodies);
         body_destroy(minor_mass, bodies, num_of_bodies);
     }
-    else
+    else // Bodies combine into one
     {
         mfloat_t m1v1[VEC2_SIZE];
         mfloat_t m2v2[VEC2_SIZE];
@@ -364,6 +361,7 @@ void body_render(Display *display, Body *body)
 
 Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float x, float y, sfUint32 mass)
 {
+    assert(mass > 0);
     Body *body = NULL;
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
@@ -421,4 +419,20 @@ void body_destroy(Body *body, Body *bodies, sfUint32 *num_of_bodies)
             break;
         }
     }
+}
+
+void body_destroy_all(Body *bodies, sfUint32 *num_of_bodies)
+{
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(bodies[i].shape != NULL)
+        {
+            sfCircleShape_destroy(bodies[i].shape);
+            bodies[i].shape = NULL;
+            sfText_destroy(bodies[i].info_text);
+            bodies[i].info_text = NULL;
+            sfClock_destroy(bodies[i].trail.trail_timer);
+        }
+    }
+    (*num_of_bodies) = 0;
 }

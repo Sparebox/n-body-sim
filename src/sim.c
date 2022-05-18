@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "sim.h"
+#include "editor.h"
 
 void sim_poll_events(Sim *sim) 
 {
@@ -16,42 +17,47 @@ void sim_poll_events(Sim *sim)
                 sfRenderWindow_close(window);
                 break;
             case sfEvtMouseWheelScrolled :
-                display->zoom_level = event.mouseWheelScroll.delta > 0.f ? 1.1f * display->zoom_level + 0.1f : 0.9f * display->zoom_level - 0.1f;
-                display->zoom_level = display->zoom_level < 0.1f ? 0.1f : display->zoom_level;
-                const sfVector2f new_size = {WIN_WIDTH * display->zoom_level, WIN_HEIGHT * display->zoom_level};
-                sfView_setSize(display->view, new_size);
+                sim_handle_mouse_scroll(sim, &event);
                 break;
             case sfEvtMouseButtonPressed :
+                display->last_mouse_click_pos = sfMouse_getPositionRenderWindow(window);
                 if(event.mouseButton.button == sfMouseLeft)
                 {
-                    display->last_mouse_pos = sfMouse_getPositionRenderWindow(window);
-                    const sfVector2f screen_mouse_pos = 
-                        sfRenderWindow_mapPixelToCoords(display->render_window, display->last_mouse_pos, display->view);
-                    sfFloatRect bounds = { 0 };
-                    for(size_t i = 0; i < MAX_BODIES; i++)
-                    {
-                        if(sim->bodies[i].shape == NULL)
-                        {
-                            continue;
-                        }
-                        bounds = sfCircleShape_getGlobalBounds(sim->bodies[i].shape);
-                        if(sfFloatRect_contains(&bounds, screen_mouse_pos.x, screen_mouse_pos.y))
-                        {
-                            sim->followed_body = &sim->bodies[i];
-                            sim->following_selected_body = sfTrue;
-                            break;
-                        }
-                        else
-                        {
-                            sim->following_selected_body = sfFalse;
-                            sim->following_largest_body = sfFalse;
-                        }
-                    }
-                    
+                    sim_handle_left_click(sim);
                 }
                 else if(event.mouseButton.button == sfMouseRight)
                 {
-                    sim->following_largest_body = !sim->following_largest_body;
+                    if(sim->editor_enabled)
+                    {
+
+                    }
+                    else
+                    {
+                        sim->following_largest_body = !sim->following_largest_body;
+                    }
+                }
+                break;
+            case sfEvtMouseButtonReleased :
+                if(event.mouseButton.button == sfMouseLeft)
+                {
+                    if(sim->editor_enabled)
+                    {
+                        if(sim->editor.selected_body != NULL)
+                        {
+                            editor_apply_velocity(&sim->editor, display);
+                        }
+                        if(sim->editor.circle_mode_enabled)
+                        {
+                            sim_create_circle(
+                                sim,
+                                display->last_mouse_click_pos.x,
+                                display->last_mouse_click_pos.y,
+                                sfCircleShape_getRadius(sim->editor.tool_circle),
+                                20,
+                                BODY_DEFAULT_MASS,
+                                sfTrue);
+                        }
+                    }
                 }
                 break;
             case sfEvtKeyPressed :
@@ -60,14 +66,46 @@ void sim_poll_events(Sim *sim)
                     case sfKeyEscape :
                         sfRenderWindow_close(window);
                         break;
-                    case sfKeyAdd :
-                        sim->sim_speed_multiplier = sim->sim_speed_multiplier < 255 ? sim->sim_speed_multiplier + 1 : 255;
-                        break;
-                    case sfKeySubtract :
-                        sim->sim_speed_multiplier = sim->sim_speed_multiplier < 2 ? 1 : sim->sim_speed_multiplier - 1;
-                        break;
                     case sfKeySpace :
                         sim->paused = !sim->paused;
+                        break;
+                    case sfKeyE :
+                        sim->editor_enabled = !sim->editor_enabled;
+                        if(sim->editor.tool_circle == NULL) // Create tool circle shape once
+                        {
+                            const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
+                            sim->editor.tool_circle = sfCircleShape_create();
+                            sfCircleShape_setOutlineThickness(sim->editor.tool_circle, 1.f);
+                            sfCircleShape_setOutlineColor(sim->editor.tool_circle, sfWhite);
+                            sfCircleShape_setFillColor(sim->editor.tool_circle, sfTransparent);
+                            sfCircleShape_setPosition(
+                                sim->editor.tool_circle,
+                                sfRenderWindow_mapPixelToCoords(display->render_window, mouse_pos, display->view)
+                            );
+                        }
+                        break;
+                    case sfKeyR :
+                        if(sim->editor_enabled)
+                        {
+                            sim_create_random_distribution(sim, 1000, sfTrue);
+                        }
+                        break;
+                    case sfKeyX :
+                        if(sim->editor_enabled)
+                        {
+                            body_destroy_all(sim->bodies, &sim->num_of_bodies);
+                        }   
+                        break;
+                    case sfKeyC :
+                        if(sim->editor_enabled)
+                        {
+                            sim->editor.circle_mode_enabled = !sim->editor.circle_mode_enabled;
+                            const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
+                            sfCircleShape_setPosition(
+                                sim->editor.tool_circle,
+                                sfRenderWindow_mapPixelToCoords(display->render_window, mouse_pos, display->view)
+                            );
+                        }
                         break;
                     default :
                         break;
@@ -79,63 +117,124 @@ void sim_poll_events(Sim *sim)
     }
 }
 
+void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
+{
+    if(sim->editor_enabled)
+    {
+        sfFloatRect bounds = { 0 };
+        const sfVector2i screen_mouse_pos = sfMouse_getPositionRenderWindow(sim->display.render_window);
+        const sfVector2f world_mouse_pos = 
+            sfRenderWindow_mapPixelToCoords(sim->display.render_window, screen_mouse_pos, sim->display.view);
+        // When cursor is on a body
+        for(size_t i = 0; i < MAX_BODIES; i++)
+        {
+            if(sim->bodies[i].shape == NULL)
+            {
+                continue;
+            }
+            bounds = sfCircleShape_getGlobalBounds(sim->bodies[i].shape);
+            if(sfFloatRect_contains(&bounds, world_mouse_pos.x, world_mouse_pos.y))
+            {
+                if(event->mouseWheelScroll.delta > 0.f)
+                {
+                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass + BODY_DEFAULT_MASS);
+                }
+                else if(sim->bodies[i].mass > BODY_DEFAULT_MASS * 2)
+                {
+                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass - BODY_DEFAULT_MASS);
+                }
+            }
+        }
+        if(event->mouseWheelScroll.delta > 0.f)
+        {
+            sim->editor.new_body_mass += BODY_DEFAULT_MASS * sim->display.zoom_level;
+        }
+        else if(sim->editor.new_body_mass > BODY_DEFAULT_MASS * 2 )
+        {
+            sim->editor.new_body_mass -= BODY_DEFAULT_MASS * sim->display.zoom_level;
+        }
+    }
+    else
+    {
+        sim->display.zoom_level = 
+            event->mouseWheelScroll.delta > 0.f ? 1.1f * sim->display.zoom_level + 0.1f : 0.9f * sim->display.zoom_level - 0.1f;
+        sim->display.zoom_level = sim->display.zoom_level < 0.1f ? 0.1f : sim->display.zoom_level;
+        const sfVector2f new_size = {WIN_WIDTH * sim->display.zoom_level, WIN_HEIGHT * sim->display.zoom_level};
+        sfView_setSize(sim->display.view, new_size);
+    }
+}
+
+void sim_handle_left_click(Sim *sim)
+{
+    const sfVector2f world_mouse_pos = 
+    sfRenderWindow_mapPixelToCoords(sim->display.render_window, sim->display.last_mouse_click_pos, sim->display.view);
+    sfFloatRect bounds = { 0 };
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(sim->bodies[i].shape == NULL)
+        {
+            continue;
+        }
+        bounds = sfCircleShape_getGlobalBounds(sim->bodies[i].shape);
+        if(sfFloatRect_contains(&bounds, world_mouse_pos.x, world_mouse_pos.y)) // If mouse is on a body
+        {
+            if(sim->editor_enabled)
+            {
+                sim->editor.selected_body = &sim->bodies[i];
+                sim->editor.selected_body_pos = sfCircleShape_getPosition(sim->bodies[i].shape);
+            }
+            else
+            {
+                sim->followed_body = &sim->bodies[i];
+                sim->following_selected_body = sfTrue;
+            }
+            sim->display.mouse_was_on_body = sfTrue;
+            break;
+        }
+        else
+        {
+            sim->following_selected_body = sfFalse;
+            sim->following_largest_body = sfFalse;
+            sim->display.mouse_was_on_body = sfFalse;
+        }
+    }
+    if(!sim->display.mouse_was_on_body && sim->editor_enabled)
+    {
+        if(sim->editor.circle_mode_enabled)
+        {
+            sfCircleShape_setPosition(sim->editor.tool_circle, world_mouse_pos);
+        }
+        else
+        {
+            body_create(
+                &sim->display,
+                sim->bodies,
+                &sim->num_of_bodies,
+                world_mouse_pos.x,
+                world_mouse_pos.y,
+                sim->editor.new_body_mass
+            );
+        }
+    }
+    
+}
+
 void sim_init_gui(Sim *sim)
 {
-    sim->fps_text = sfText_create();
-    sfText_setFont(sim->fps_text, sim->display.font);
-    sfText_setColor(sim->fps_text, sfWhite);
     sfVector2f scale = {0.5f, 0.5f};
     sfVector2f pos = {0.f, 0.f};
-    sfText_setPosition(sim->fps_text, pos);
-    sfText_setScale(sim->fps_text, scale);
-
-    sim->bodies_text = sfText_create();
-    sfText_setFont(sim->bodies_text, sim->display.font);
-    sfText_setColor(sim->bodies_text, sfWhite);
-    pos.x = 0.f;
-    pos.y = 15.f;
-    sfText_setPosition(sim->bodies_text, pos);
-    sfText_setScale(sim->bodies_text, scale);
-
-    sim->largest_mass_text = sfText_create();
-    sfText_setFont(sim->largest_mass_text, sim->display.font);
-    sfText_setColor(sim->largest_mass_text, sfWhite);
-    pos.x = 0.f;
+    Display *const display = &sim->display;
+    sim->fps_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
-    sfText_setPosition(sim->largest_mass_text, pos);
-    sfText_setScale(sim->largest_mass_text, scale);
-
-    sim->zoom_text = sfText_create();
-    sfText_setFont(sim->zoom_text, sim->display.font);
-    sfText_setColor(sim->zoom_text, sfWhite);
-    pos.x = 0.f;
+    sim->bodies_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
-    sfText_setPosition(sim->zoom_text, pos);
-    sfText_setScale(sim->zoom_text, scale);
-
-    sim->sim_speed_text = sfText_create();
-    sfText_setFont(sim->sim_speed_text, sim->display.font);
-    sfText_setColor(sim->sim_speed_text, sfWhite);
-    pos.x = 0.f;
+    sim->largest_mass_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
-    sfText_setPosition(sim->sim_speed_text, pos);
-    sfText_setScale(sim->sim_speed_text, scale);
-
-    sim->possible_collisions_text = sfText_create();
-    sfText_setFont(sim->possible_collisions_text, sim->display.font);
-    sfText_setColor(sim->possible_collisions_text, sfWhite);
-    pos.x = 0.f;
+    sim->zoom_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
-    sfText_setPosition(sim->possible_collisions_text, pos);
-    sfText_setScale(sim->possible_collisions_text, scale);
-
-    sim->paused_text = sfText_create();
-    sfText_setFont(sim->paused_text, sim->display.font);
-    sfText_setColor(sim->paused_text, sfWhite);
-    pos.x = 0.f;
+    sim->possible_collisions_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
-    sfText_setPosition(sim->paused_text, pos);
-    sfText_setScale(sim->paused_text, scale);
+    sim->paused_text = sim_create_text(pos, scale, display->font);
 }
 
 void sim_update_gui(Sim *sim)
@@ -144,22 +243,26 @@ void sim_update_gui(Sim *sim)
     sprintf(string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
     sfText_setString(sim->fps_text, string);
 
-    sprintf(string, "BODIES %d", sim->num_of_bodies);
+    sprintf(string, "BODIES %d / %d", sim->num_of_bodies, MAX_BODIES);
     sfText_setString(sim->bodies_text, string);
 
-    sprintf(string, "LARGEST MASS %d", sim->largest_body->mass);
+    if(sim->largest_body != NULL)
+    {
+        sprintf(string, "LARGEST MASS %d", sim->largest_body->mass);
+    }
+    else
+    {
+        sprintf(string, "LARGEST MASS ");
+    }
     sfText_setString(sim->largest_mass_text, string);
-
+    
     sprintf(string, "ZOOMOUT %.1f", sim->display.zoom_level);
     sfText_setString(sim->zoom_text, string);
-
-    sprintf(string, "SIM SPEED %d", sim->sim_speed_multiplier);
-    sfText_setString(sim->sim_speed_text, string);
 
     sprintf(string, "POSSIBLE COLLISIONS %d", sim->possible_collisions);
     sfText_setString(sim->possible_collisions_text, string);
 
-    sprintf(string, sim->paused ? "PAUSED" : "RUNNING");
+    sprintf(string, sim->paused ? "PAUSED" : sim->editor_enabled ? "EDITOR" : "RUNNING");
     sfText_setString(sim->paused_text, string);
 }
 
@@ -170,9 +273,73 @@ void sim_render_gui(Sim *sim)
     sfRenderWindow_drawText(sim->display.render_window, sim->bodies_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->largest_mass_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->zoom_text, NULL);
-    sfRenderWindow_drawText(sim->display.render_window, sim->sim_speed_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->possible_collisions_text, NULL);
     sfRenderWindow_drawText(sim->display.render_window, sim->paused_text, NULL);
+}
+
+void sim_update(Sim *sim)
+{
+    sfUint32 largest_mass = 0;
+    if(sim->largest_body != NULL)
+    {
+        largest_mass = sim->largest_body->mass;
+    }
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(sim->bodies[i].shape != NULL && !sim->paused)
+        {
+            if(sim->bodies[i].mass > largest_mass)
+            {
+                sim->largest_body = &sim->bodies[i];
+                largest_mass = sim->largest_body->mass;
+            }
+            body_update(
+                &sim->bodies[i],
+                sim->bodies,
+                sfTime_asSeconds(sim->delta_time)
+            );
+        }
+    }
+    Body *possible_collisions[MAX_BODIES << 1] = { 0 };
+    sim->possible_collisions = body_sweep_and_prune(sim->bodies, possible_collisions);
+    body_check_collisions(&sim->display, possible_collisions, sim->bodies, &sim->num_of_bodies);
+}
+
+void sim_render(Sim *sim)
+{
+    // Move view
+    if(sim->following_largest_body && sim->largest_body->shape != NULL)
+    {
+        const sfVector2f largest_body_pos = sfCircleShape_getPosition(sim->largest_body->shape);
+        sfView_setCenter(sim->display.view, largest_body_pos);
+    }
+    else if(sim->following_selected_body && sim->followed_body->shape != NULL)
+    {
+        const sfVector2f followed_body_pos = sfCircleShape_getPosition(sim->followed_body->shape);
+        sfView_setCenter(sim->display.view, followed_body_pos);
+    }
+    sfRenderWindow_setView(sim->display.render_window, sim->display.view);
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(sim->bodies[i].shape != NULL)
+        {
+            body_render(&sim->display, &sim->bodies[i]);
+        }
+    }
+    if(sim->editor_enabled)
+    {
+        editor_render(sim);
+    }
+}
+
+sfText* sim_create_text(sfVector2f pos, sfVector2f scale, sfFont *font)
+{
+    sfText *text = sfText_create();
+    sfText_setFont(text, font);
+    sfText_setColor(text, sfWhite);
+    sfText_setPosition(text, pos);
+    sfText_setScale(text, scale);
+    return text;
 }
 
 void sim_create_circle(
@@ -282,6 +449,7 @@ void sim_random_vector(mfloat_t *result, float min_length, float max_length)
 
 void sim_destroy(Sim *sim)
 {
+    editor_destroy(&sim->editor);
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
         if(sim->bodies[i].shape != NULL)
@@ -294,7 +462,6 @@ void sim_destroy(Sim *sim)
     sfText_destroy(sim->bodies_text);
     sfText_destroy(sim->largest_mass_text);
     sfText_destroy(sim->zoom_text);
-    sfText_destroy(sim->sim_speed_text);
     sfText_destroy(sim->possible_collisions_text);
     sfClock_destroy(sim->delta_clock);
     sfView_destroy(sim->display.view);
