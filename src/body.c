@@ -48,10 +48,7 @@ void body_update(
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
     }
     // Move body 
-    const sfVector2f offset = {
-        new_vel[0],
-        new_vel[1]
-    };
+    const sfVector2f offset = {new_vel[0], new_vel[1]};
     sfCircleShape_move(body->shape, offset);
     sfText_move(body->info_text, offset);
 }
@@ -199,14 +196,14 @@ void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfU
             major_mass_pos.x,
             major_mass_pos.y,
             (major_mass->mass + minor_mass->mass) / 2
-            );
+        );
         Body *new2 = body_create(display,
             bodies,
             num_of_bodies,
             major_mass_pos.x,
             major_mass_pos.y,
             (major_mass->mass + minor_mass->mass) / 2
-            );
+        );
         sfVector2f offset = { 0 };
         const float major_mass_radius = sfCircleShape_getRadius(major_mass->shape);
         vec2_rotate(separating_vel, impact_dir, MPI_2);
@@ -394,13 +391,15 @@ Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float
     const sfVector2f origin = {mass / BODY_RADIUS_FACTOR, mass / BODY_RADIUS_FACTOR};
     sfCircleShape_setOrigin(body->shape, origin);
     sfCircleShape_setPosition(body->shape, pos);
-    const sfUint8 red = sim_random_uint(0, 255);
-    const sfUint8 green = sim_random_uint(0, 255);
-    const sfUint8 blue = sim_random_uint(0, 255);
+    const sfUint8 red = sim_random_int(0, 255);
+    const sfUint8 green = sim_random_int(0, 255);
+    const sfUint8 blue = sim_random_int(0, 255);
     const sfColor color = sfColor_fromRGB(red, green, blue);
     sfCircleShape_setFillColor(body->shape, color);
     body->trail.color = color;
     body->trail.trail_timer = sfClock_create();
+    body->trail.current_index = 0;
+    memset(body->trail.vertices, 0, MAX_TRAIL_VERTICES * sizeof(sfVertex));
     body->trail.vertices[MAX_TRAIL_VERTICES - 1].position = pos;
     sfText_setPosition(body->info_text, pos);
     sfText_setOrigin(body->info_text, origin);

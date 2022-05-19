@@ -36,8 +36,8 @@ void initialize(Sim *sim)
     sim->delta_clock = sfClock_create();
     display_init(&sim->display);
     sim_init_gui(sim);
-    editor_init_gui(&sim->editor, &sim->display); 
-}
+    editor_init_gui(&sim->editor, &sim->display);
+ }
 
 void update(Sim *sim)
 {

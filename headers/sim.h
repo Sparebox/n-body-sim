@@ -2,10 +2,9 @@
 #include "display.h"
 #include "body.h"
 #define MAX_BODIES 4096
-#define GRAVITATIONAL_CONSTANT 6.67e-1f
-#define TIMESTEP 1
-#define VELOCITY_LIMITED 0
-#define BODY_SPLITTING_ENABLED 1
+#define GRAVITATIONAL_CONSTANT 6.67e-2f
+#define VELOCITY_LIMITED 1
+#define BODY_SPLITTING_ENABLED 0
 #define DISTANCE_THRESHOLD 3000.f // Maximum distance of gravitational force calculation
 
 typedef struct {
@@ -60,7 +59,7 @@ void sim_create_circle(
 void sim_create_grid(Sim *sim, sfUint32 count, float spacing);
 void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spacing);
 void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary);
-sfUint32 sim_random_uint(sfUint32 min, sfUint32 max);
+sfInt32 sim_random_int(sfInt32 min, sfInt32 max);
 float sim_random_float(float min, float max);
 void sim_random_vector(mfloat_t *result, float min_length, float max_length);
 void sim_poll_events(Sim *sim);

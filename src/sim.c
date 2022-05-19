@@ -87,7 +87,8 @@ void sim_poll_events(Sim *sim)
                     case sfKeyR :
                         if(sim->editor_enabled)
                         {
-                            sim_create_random_distribution(sim, 1000, sfTrue);
+                            sim->largest_body = NULL;
+                            sim_create_random_distribution(sim, 1000, sfFalse);
                         }
                         break;
                     case sfKeyX :
@@ -154,7 +155,7 @@ void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
             sim->editor.new_body_mass -= BODY_DEFAULT_MASS * sim->display.zoom_level;
         }
     }
-    else
+    else // Zooming the view
     {
         sim->display.zoom_level = 
             event->mouseWheelScroll.delta > 0.f ? 1.1f * sim->display.zoom_level + 0.1f : 0.9f * sim->display.zoom_level - 0.1f;
@@ -308,7 +309,7 @@ void sim_update(Sim *sim)
 void sim_render(Sim *sim)
 {
     // Move view
-    if(sim->following_largest_body && sim->largest_body->shape != NULL)
+    if(sim->following_largest_body && sim->largest_body != NULL && sim->largest_body->shape != NULL)
     {
         const sfVector2f largest_body_pos = sfCircleShape_getPosition(sim->largest_body->shape);
         sfView_setCenter(sim->display.view, largest_body_pos);
@@ -413,7 +414,14 @@ void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spa
 void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
 {
     srand((unsigned int)time(NULL));
-    mfloat_t pos[] = {sim_random_uint(0, WIN_WIDTH), sim_random_uint(0, WIN_HEIGHT)};
+    const sfVector2f view_size = sfView_getSize(sim->display.view);
+    const sfVector2f view_center = sfView_getCenter(sim->display.view);
+    const float left    = view_center.x - view_size.x / 2.f;
+    const float right   = view_center.x + view_size.x / 2.f;
+    const float top     = view_center.y - view_size.y / 2.f;
+    const float bottom  = view_center.y + view_size.y / 2.f;
+    printf("Left: %.2f, Right: %.2f, Top: %.2f, Bot: %.2f\n", left, right, top, bottom);
+    mfloat_t pos[] = {sim_random_int(left, right), sim_random_int(top, bottom)};
     mfloat_t rng_vel[VEC2_SIZE];
     Body *body = NULL;
     for(size_t i = 0; i < count; i++)
@@ -421,15 +429,15 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
         if(!stationary)
         {
-            sim_random_vector(rng_vel, 0, 1);
+            sim_random_vector(rng_vel, 0.f, 50.f);
             vec2_assign(body->vel, rng_vel);
         }
-        pos[0] = sim_random_uint(0, WIN_WIDTH);
-        pos[1] = sim_random_uint(0, WIN_HEIGHT);
+        pos[0] = sim_random_int(left, right);
+        pos[1] = sim_random_int(top, bottom);
     }
 }
 
-sfUint32 sim_random_uint(sfUint32 min, sfUint32 max) 
+sfInt32 sim_random_int(sfInt32 min, sfInt32 max)
 {
     return rand() % (max - min + 1) + min;
 }
@@ -444,7 +452,7 @@ void sim_random_vector(mfloat_t *result, float min_length, float max_length)
 {
     vec2_one(result);
     vec2_rotate(result, result, sim_random_float(0.f, 2 * M_PI));
-    vec2_multiply_f(result, result, sim_random_uint(min_length, max_length));
+    vec2_multiply_f(result, result, sim_random_int(min_length, max_length));
 }
 
 void sim_destroy(Sim *sim)

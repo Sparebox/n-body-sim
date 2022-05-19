@@ -55,7 +55,7 @@ void editor_render(Sim *sim)
 {
     const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(sim->display.render_window);
     const sfVector2f world_mouse_pos = sfRenderWindow_mapPixelToCoords(sim->display.render_window, mouse_pos, sim->display.view);
-    // Custom velocity line
+    // Editor velocity line
     if(sfMouse_isButtonPressed(sfMouseLeft) &&
     !sim->editor.circle_mode_enabled &&
     sim->editor.selected_body_pos.x != 0.f &&
