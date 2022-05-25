@@ -16,6 +16,8 @@ int main()
     if(sim == NULL)
     {
         fprintf(stderr, "Could not allocate memory for sim struct\n");
+        printf("Press ENTER to Continue\n");
+        getchar();
         exit(EXIT_FAILURE);
     }
     initialize(sim);
@@ -34,6 +36,7 @@ int main()
 void initialize(Sim *sim) 
 {
     sim->delta_clock = sfClock_create();
+    sim->sim_speed_multiplier = 1;
     display_init(&sim->display);
     sim_init_gui(sim);
     editor_init_gui(&sim->editor, &sim->display);

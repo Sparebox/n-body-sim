@@ -22,3 +22,4 @@ typedef struct {
 
 void display_init(Display *display);
 void display_handle_mouse_pan(Display *display, sfBool editor_enabled);
+void display_destroy(Display *display);

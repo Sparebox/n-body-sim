@@ -1,6 +1,7 @@
 #pragma once
 #include "sim.h"
 #include "display.h"
+#define CIRCLE_TOOL_LINE_THICKNESS 2.f
 
 void editor_render(Sim *sim);
 void editor_render_gui(Editor *editor, Display *display);

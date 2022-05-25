@@ -7,40 +7,16 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-void runge_kutta_integrate_vel(Body *body, mfloat_t *new_vel, float delta_time);
+static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time);
 
-void body_update(
-    Body *body,
-    Body *bodies,
-    float delta_time
-)
+void body_update(Body *body, float delta_time)
 {
-    // Gravity
-    mfloat_t pos_a[VEC2_SIZE];
-    mfloat_t pos_b[VEC2_SIZE];
-    mfloat_t gravitation_force[VEC2_SIZE];
-    for(size_t i = 0; i < MAX_BODIES; i++)
-    {
-        if(bodies[i].shape != NULL && bodies[i].shape != body->shape)
-        {
-            body_get_position(body, pos_a);
-            body_get_position(&bodies[i], pos_b);
-            const float distance2 = vec2_distance_squared(pos_a, pos_b);
-            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD &&
-                body->mass < BODY_DEFAULT_MASS * 2 &&
-                bodies[i].mass < BODY_DEFAULT_MASS * 2)
-            {
-                continue;
-            }
-            body_calculate_gravitation_force(gravitation_force, body, &bodies[i], distance2);
-            body_apply_force(body, gravitation_force);
-        }
-    }
+    // Trail
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
     trail_append(&body->trail, pos.x, pos.y);
-    // Runge Kutta 4 integration
-    mfloat_t new_vel[VEC2_SIZE];
-    runge_kutta_integrate_vel(body, new_vel, delta_time);
+    // Velocity verlet integration
+    mfloat_t new_pos_result[VEC2_SIZE];
+    velocity_verlet_integerate(body, new_pos_result, delta_time);
     //Limit speed
     if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
     {
@@ -48,32 +24,29 @@ void body_update(
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
     }
     // Move body 
-    const sfVector2f offset = {new_vel[0], new_vel[1]};
-    sfCircleShape_move(body->shape, offset);
-    sfText_move(body->info_text, offset);
+    const sfVector2f new_pos = {new_pos_result[0], new_pos_result[1]};
+    sfCircleShape_setPosition(body->shape, new_pos);
+    sfText_setPosition(body->info_text, new_pos);
 }
 
-void runge_kutta_integrate_vel(Body *body, mfloat_t *new_vel, float delta_time)
+void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time)
 {
-    mfloat_t k1[VEC2_SIZE];
-    mfloat_t k2[VEC2_SIZE];
-    mfloat_t k3[VEC2_SIZE];
-    mfloat_t k4[VEC2_SIZE];
+    mfloat_t pos[VEC2_SIZE];
+    mfloat_t temp[VEC2_SIZE];
+    body_get_position(body, pos);
 
-    vec2_add(body->vel, body->vel, body->acc);
+    // New position
+    vec2_multiply_f(temp, body->vel, delta_time);
+    vec2_add(new_pos, pos, temp);
+    vec2_multiply_f(temp, body->acc, delta_time * delta_time * 0.5f);
+    vec2_add(new_pos, new_pos, temp);
+    // New velocity
+    vec2_multiply_f(temp, body->acc, delta_time * 0.5f);
+    vec2_add(body->vel, temp, body->vel);
+
     vec2_zero(body->acc);
-    vec2_assign(k1, body->vel);
-    vec2_multiply_f(k2, k1, delta_time / 2.f);
-    vec2_add(k2, body->vel, k2);
-    vec2_multiply_f(k3, k2, delta_time / 2.f);
-    vec2_add(k3, body->vel, k3);
-    vec2_multiply_f(k4, k3, delta_time);
-    vec2_add(k4, body->vel, k4);
-
-    vec2_add(new_vel, k1, k4);
-    vec2_add(new_vel, vec2_multiply_f(k2, k2, 2.f), vec2_multiply_f(k3, k3, 2.f));
-    vec2_multiply_f(new_vel, new_vel, delta_time / 6.f);
 }
+
 
 int body_compare_x_axis(const void *a, const void *b)
 {
@@ -160,7 +133,7 @@ sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
     return (sfUint32) possible_index;
 }
 
-void body_handle_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
+void body_solve_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
 {
     mfloat_t impact_dir[VEC2_SIZE];
     mfloat_t a_pos[VEC2_SIZE];
@@ -282,17 +255,18 @@ void body_check_collisions(Display *display, Body **possible_collisions, Body *b
             radius_b = sfCircleShape_getRadius(b->shape);
             if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                body_handle_collision(display, a, b, bodies, num_of_bodies);
+                body_solve_collision(display, a, b, bodies, num_of_bodies);
                 break;
             }
         }
     }
 }
 
-void body_apply_force(Body *body, mfloat_t *force) 
+void body_apply_force(Body *body, const mfloat_t *force) 
 {   
-    vec2_divide_f(force, force, body->mass);
-    vec2_add(body->acc, body->acc, force);
+    mfloat_t new_acc[VEC2_SIZE];
+    vec2_divide_f(new_acc, force, body->mass);
+    vec2_add(body->acc, body->acc, new_acc);
 }
 
 void body_apply_mass(Body *body, sfUint32 mass)
@@ -310,22 +284,6 @@ void body_apply_mass(Body *body, sfUint32 mass)
     sfVector2f pos = sfCircleShape_getPosition(body->shape);
     pos.x -= bounds.width / 2;
     sfText_setPosition(body->info_text, pos);
-}
-
-void body_calculate_gravitation_force(mfloat_t *result, Body *a, Body *b,  float dist2)
-{
-    if(dist2 == 0.f) // Prevent division by zero
-    {
-        return;
-    }
-    mfloat_t a_pos[VEC2_SIZE];
-    mfloat_t b_pos[VEC2_SIZE];
-    const float force = (GRAVITATIONAL_CONSTANT * a->mass * b->mass) / dist2;
-    body_get_position(a, a_pos);
-    body_get_position(b, b_pos);
-    vec2_subtract(result, b_pos, a_pos);
-    vec2_normalize(result, result);
-    vec2_multiply_f(result, result, force);
 }
 
 void body_get_position(Body *body, mfloat_t *result)

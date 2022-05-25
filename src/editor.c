@@ -43,10 +43,16 @@ void editor_init_gui(Editor *editor, Display *display)
     pos.y += 15.f;
     sfText_setPosition(editor->create_circle_text, pos);
 
-    editor->body_preview = sfCircleShape_create();
-    sfCircleShape_setFillColor(editor->body_preview, sfTransparent);
-    sfCircleShape_setOutlineColor(editor->body_preview, sfWhite);
-    sfCircleShape_setOutlineThickness(editor->body_preview, 1.f);
+    editor->new_body_mass_text = sfText_create();
+    sfText_setString(editor->new_body_mass_text, "MASS");
+    sfText_setFont(editor->new_body_mass_text, display->font);
+    sfText_setColor(editor->new_body_mass_text, sfRed);
+    sfText_setScale(editor->new_body_mass_text, scale);
+
+    editor->body_preview_circle = sfCircleShape_create();
+    sfCircleShape_setFillColor(editor->body_preview_circle, sfTransparent);
+    sfCircleShape_setOutlineColor(editor->body_preview_circle, sfWhite);
+    sfCircleShape_setOutlineThickness(editor->body_preview_circle, CIRCLE_TOOL_LINE_THICKNESS);
     
 }
 
@@ -61,7 +67,9 @@ void editor_render(Sim *sim)
     sim->editor.selected_body_pos.x != 0.f &&
     sim->editor.selected_body_pos.y != 0.f)
     {
-        sfVertex vertex1 = {.color = sfWhite, .position = sim->editor.selected_body_pos};
+        sfVertex vertex1 = {
+            .color = sfWhite,
+            .position = sim->editor.selected_body_pos};
         sfVertex vertex2 = {
             .color = sfWhite, 
             .position = sfRenderWindow_mapPixelToCoords(sim->display.render_window, mouse_pos, sim->display.view)
@@ -72,19 +80,21 @@ void editor_render(Sim *sim)
     // Circle tool drawing
     editor_render_circle_tool(sim, mouse_pos);
     // Body preview
-    sfCircleShape_setRadius(sim->editor.body_preview, sim->editor.new_body_mass / BODY_RADIUS_FACTOR);
+    sfCircleShape_setRadius(sim->editor.body_preview_circle, sim->editor.new_body_mass / BODY_RADIUS_FACTOR);
     const sfVector2f new_preview_pos = 
         {
             world_mouse_pos.x - sim->editor.new_body_mass / BODY_RADIUS_FACTOR,
             world_mouse_pos.y - sim->editor.new_body_mass / BODY_RADIUS_FACTOR
         };
     sfCircleShape_setPosition(
-        sim->editor.body_preview,
+        sim->editor.body_preview_circle,
         new_preview_pos
     );
     if(!sim->editor.circle_mode_enabled)
     {
-        sfRenderWindow_drawCircleShape(sim->display.render_window, sim->editor.body_preview, NULL);
+        sfRenderWindow_drawCircleShape(sim->display.render_window, sim->editor.body_preview_circle, NULL);
+        sfText_setPosition(sim->editor.new_body_mass_text, new_preview_pos);
+        sfRenderWindow_drawText(sim->display.render_window, sim->editor.new_body_mass_text, NULL);
     }
 }
 
@@ -129,8 +139,8 @@ void editor_apply_velocity(Editor *editor, Display *display)
     const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
     const sfVector2i selected_body_screen_pos = 
         sfRenderWindow_mapCoordsToPixel(display->render_window, editor->selected_body_pos, display->view);
-    editor->selected_body->vel[0] = selected_body_screen_pos.x - mouse_pos.x;
-    editor->selected_body->vel[1] = selected_body_screen_pos.y - mouse_pos.y;
+    editor->selected_body->vel[0] += selected_body_screen_pos.x - mouse_pos.x;
+    editor->selected_body->vel[1] += selected_body_screen_pos.y - mouse_pos.y;
 }
 
 void editor_destroy(Editor *editor)
@@ -139,9 +149,10 @@ void editor_destroy(Editor *editor)
     sfText_destroy(editor->delete_all_text);
     sfText_destroy(editor->random_dist_text);
     sfText_destroy(editor->create_circle_text);
+    sfText_destroy(editor->new_body_mass_text);
     if(editor->tool_circle != NULL)
     {
         sfCircleShape_destroy(editor->tool_circle);
     }
-    sfCircleShape_destroy(editor->body_preview);
+    sfCircleShape_destroy(editor->body_preview_circle);
 }

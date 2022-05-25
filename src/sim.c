@@ -71,6 +71,7 @@ void sim_poll_events(Sim *sim)
                         break;
                     case sfKeyE :
                         sim->editor_enabled = !sim->editor_enabled;
+                        sim->editor.new_body_mass = 1;
                         if(sim->editor.tool_circle == NULL) // Create tool circle shape once
                         {
                             const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
@@ -108,6 +109,15 @@ void sim_poll_events(Sim *sim)
                             );
                         }
                         break;
+                    case sfKeyAdd :
+                        sim->sim_speed_multiplier++;
+                        break;
+                    case sfKeySubtract :
+                        if(sim->sim_speed_multiplier > 1)
+                        {
+                            sim->sim_speed_multiplier--;
+                        }
+                        break;
                     default :
                         break;
                 }
@@ -126,7 +136,7 @@ void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
         const sfVector2i screen_mouse_pos = sfMouse_getPositionRenderWindow(sim->display.render_window);
         const sfVector2f world_mouse_pos = 
             sfRenderWindow_mapPixelToCoords(sim->display.render_window, screen_mouse_pos, sim->display.view);
-        // When cursor is on a body
+        // Modifying an existing body
         for(size_t i = 0; i < MAX_BODIES; i++)
         {
             if(sim->bodies[i].shape == NULL)
@@ -138,14 +148,15 @@ void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
             {
                 if(event->mouseWheelScroll.delta > 0.f)
                 {
-                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass + BODY_DEFAULT_MASS);
+                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass + BODY_DEFAULT_MASS * sim->display.zoom_level * 10);
                 }
                 else if(sim->bodies[i].mass > BODY_DEFAULT_MASS * 2)
                 {
-                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass - BODY_DEFAULT_MASS);
+                    body_apply_mass(&sim->bodies[i], sim->bodies[i].mass - BODY_DEFAULT_MASS * sim->display.zoom_level * 10);
                 }
             }
         }
+        // Creating a new body
         if(event->mouseWheelScroll.delta > 0.f)
         {
             sim->editor.new_body_mass += BODY_DEFAULT_MASS * sim->display.zoom_level;
@@ -154,6 +165,9 @@ void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
         {
             sim->editor.new_body_mass -= BODY_DEFAULT_MASS * sim->display.zoom_level;
         }
+        char new_mass_string[32];
+        sprintf(new_mass_string, "MASS %d", sim->editor.new_body_mass);
+        sfText_setString(sim->editor.new_body_mass_text, new_mass_string);
     }
     else // Zooming the view
     {
@@ -280,6 +294,8 @@ void sim_render_gui(Sim *sim)
 
 void sim_update(Sim *sim)
 {
+    //sim_apply_gravitation_forces(sim->bodies);
+    sim_apply_interatomic_forces(sim->bodies);
     sfUint32 largest_mass = 0;
     if(sim->largest_body != NULL)
     {
@@ -296,8 +312,7 @@ void sim_update(Sim *sim)
             }
             body_update(
                 &sim->bodies[i],
-                sim->bodies,
-                sfTime_asSeconds(sim->delta_time)
+                sfTime_asSeconds(sim->delta_time) * sim->sim_speed_multiplier
             );
         }
     }
@@ -420,7 +435,6 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
     const float right   = view_center.x + view_size.x / 2.f;
     const float top     = view_center.y - view_size.y / 2.f;
     const float bottom  = view_center.y + view_size.y / 2.f;
-    printf("Left: %.2f, Right: %.2f, Top: %.2f, Bot: %.2f\n", left, right, top, bottom);
     mfloat_t pos[] = {sim_random_int(left, right), sim_random_int(top, bottom)};
     mfloat_t rng_vel[VEC2_SIZE];
     Body *body = NULL;
@@ -444,15 +458,118 @@ sfInt32 sim_random_int(sfInt32 min, sfInt32 max)
 
 float sim_random_float(float min, float max)
 {
-    float random = ((float) rand() / (float) RAND_MAX) * max;
+    const float random = ((float) rand() / (float) RAND_MAX) * max;
     return random < min ? min : random;
 }
 
-void sim_random_vector(mfloat_t *result, float min_length, float max_length)
+void sim_random_vector(mfloat_t *result, sfUint32 min_length, sfUint32 max_length)
 {
     vec2_one(result);
     vec2_rotate(result, result, sim_random_float(0.f, 2 * M_PI));
     vec2_multiply_f(result, result, sim_random_int(min_length, max_length));
+}
+
+void sim_apply_gravitation_forces(Body *bodies)
+{
+    mfloat_t pos_a[VEC2_SIZE];
+    mfloat_t pos_b[VEC2_SIZE];
+    mfloat_t gravity[VEC2_SIZE];
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(bodies[i].shape == NULL)
+        {
+            continue;
+        }
+        for(size_t j = 0; j < MAX_BODIES - 1; j++)
+        {
+            if((bodies[i].shape == bodies[j].shape) || bodies[j].shape == NULL)
+            {
+                continue;
+            }
+            body_get_position(&bodies[i], pos_a);
+            body_get_position(&bodies[j], pos_b);
+            const float distance2 = vec2_distance_squared(pos_a, pos_b);
+            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD)
+            {
+                continue;
+            }
+            sim_gravitation_force(gravity, &bodies[i], &bodies[j], distance2);
+            body_apply_force(&bodies[i], gravity);
+            vec2_negative(gravity, gravity);
+            body_apply_force(&bodies[j], gravity);
+        }
+    }
+}
+
+void sim_gravitation_force(mfloat_t *result, Body *a, Body *b, float dist2)
+{
+    if(dist2 == 0.f) // Prevent division by zero
+    {
+        return;
+    }
+    mfloat_t a_pos[VEC2_SIZE];
+    mfloat_t b_pos[VEC2_SIZE];
+    const float force = (GRAVITATIONAL_CONSTANT * a->mass * b->mass) / dist2;
+    body_get_position(a, a_pos);
+    body_get_position(b, b_pos);
+    vec2_subtract(result, b_pos, a_pos);
+    vec2_normalize(result, result);
+    vec2_multiply_f(result, result, force);
+}
+
+void sim_apply_interatomic_forces(Body *bodies)
+{
+    mfloat_t pos_a[VEC2_SIZE];
+    mfloat_t pos_b[VEC2_SIZE];
+    mfloat_t direction[VEC2_SIZE];
+    mfloat_t waals_force[VEC2_SIZE];
+    mfloat_t coulomb_force[VEC2_SIZE];
+    mfloat_t resultant_force[VEC2_SIZE];
+    for(size_t i = 0; i < MAX_BODIES; i++)
+    {
+        if(bodies[i].shape == NULL)
+        {
+            continue;
+        }
+        for(size_t j = 0; j < MAX_BODIES - 1; j++)
+        {
+            if((bodies[i].shape == bodies[j].shape) || bodies[j].shape == NULL)
+            {
+                continue;
+            }
+            body_get_position(&bodies[i], pos_a);
+            body_get_position(&bodies[j], pos_b);
+            const float distance2 = vec2_distance_squared(pos_a, pos_b);
+            if(distance2 > DISTANCE_THRESHOLD * DISTANCE_THRESHOLD)
+            {
+                continue;
+            }
+            vec2_subtract(direction, pos_a, pos_b);
+            vec2_normalize(direction, direction);
+            sim_coulombic_force(coulomb_force, &bodies[i], &bodies[j], distance2, direction); // Attractive force
+            vec2_negative(coulomb_force, coulomb_force);
+            sim_van_der_waals_force(waals_force, &bodies[i], &bodies[j], distance2, direction); // Repulsive force
+            vec2_add(resultant_force, coulomb_force, waals_force);
+            body_apply_force(&bodies[i], resultant_force);
+            vec2_negative(resultant_force, resultant_force);
+            body_apply_force(&bodies[j], resultant_force);
+        }
+    }
+}
+
+void sim_coulombic_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat_t *direction)
+{
+    const float magnitude = (a->mass * b->mass) / (dist2 * 4 * MPI * EPSILON_0);
+    vec2_multiply_f(result, direction, magnitude);
+}
+
+void sim_van_der_waals_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat_t *direction)
+{
+    const float a_radius = sfCircleShape_getRadius(a->shape);
+    const float b_radius = sfCircleShape_getRadius(b->shape);
+    const float magnitude = (HAMAKER_COEFF * 64 * powf(a_radius, 3) * powf(b_radius, 3) * sqrtf(dist2))
+                            / (6 * (powf(dist2 - powf(a_radius + b_radius, 2), 2) * powf(dist2 - powf(a_radius - b_radius, 2), 2)));
+    vec2_multiply_f(result, direction, magnitude);
 }
 
 void sim_destroy(Sim *sim)
@@ -471,9 +588,8 @@ void sim_destroy(Sim *sim)
     sfText_destroy(sim->largest_mass_text);
     sfText_destroy(sim->zoom_text);
     sfText_destroy(sim->possible_collisions_text);
+    sfText_destroy(sim->paused_text);
     sfClock_destroy(sim->delta_clock);
-    sfView_destroy(sim->display.view);
-    sfView_destroy(sim->display.gui_view);
-    sfRenderWindow_destroy(sim->display.render_window);
+    display_destroy(&sim->display);
     free(sim);
 }

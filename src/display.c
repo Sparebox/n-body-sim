@@ -18,6 +18,8 @@ void display_init(Display *display)
     if(display->font == NULL) 
     {
         perror("Error loading font");
+        printf("Press ENTER to Continue\n");
+        getchar();
         exit(EXIT_FAILURE);
     }
     display->zoom_level = 1.f;
@@ -46,4 +48,12 @@ void display_handle_mouse_pan(Display *display, sfBool editor_enabled)
     vec2_multiply_f(diff, diff, display->zoom_level);
     const sfVector2f offset = {diff[0], diff[1]};
     sfView_move(display->view, offset);
+}
+
+void display_destroy(Display *display)
+{
+    sfView_destroy(display->view);
+    sfView_destroy(display->gui_view);
+    sfFont_destroy(display->font);
+    sfRenderWindow_destroy(display->render_window);
 }
