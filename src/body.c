@@ -204,15 +204,14 @@ void body_solve_collision(Display *display, Body *a, Body *b, Body *bodies, sfUi
         vec2_assign(major_mass->vel, new_vel);
         body_apply_mass(major_mass, a->mass + b->mass);
         // Calculate new color
-        sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r;
-        red_average += sfCircleShape_getFillColor(b->shape).r;
-        red_average /= 2;
-        sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b;
-        blue_average += sfCircleShape_getFillColor(b->shape).b;
-        blue_average /= 2;
-        sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g;
-        green_average += sfCircleShape_getFillColor(b->shape).g;
-        green_average /= 2;
+        const float normalized_a_mass = (float) a->mass / (float) (a->mass + b->mass);
+        const float normalized_b_mass = (float) b->mass / (float) (a->mass + b->mass);
+        sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r * normalized_a_mass;
+        red_average += sfCircleShape_getFillColor(b->shape).r * normalized_b_mass;
+        sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b * normalized_a_mass;
+        blue_average += sfCircleShape_getFillColor(b->shape).b * normalized_b_mass;
+        sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g * normalized_a_mass;
+        green_average += sfCircleShape_getFillColor(b->shape).g * normalized_b_mass;
         const sfColor new_color = sfColor_fromRGB(red_average, green_average, blue_average);
         sfCircleShape_setFillColor(major_mass->shape, new_color);
         major_mass->trail.color = new_color;

@@ -46,7 +46,11 @@ void update(Sim *sim)
 {
     sim_poll_events(sim);
     display_handle_mouse_pan(&sim->display, sim->editor_enabled);
-    if(!sim->editor_enabled)
+    if(sim->editor_enabled)
+    {
+        editor_update(sim);
+        
+    } else
     {
         sim_update(sim);
     }

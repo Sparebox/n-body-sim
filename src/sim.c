@@ -48,10 +48,12 @@ void sim_poll_events(Sim *sim)
                         }
                         if(sim->editor.circle_mode_enabled)
                         {
+                            const sfVector2f world_mouse_pos = 
+                                sfRenderWindow_mapPixelToCoords(display->render_window, display->last_mouse_click_pos, display->view);
                             sim_create_circle(
                                 sim,
-                                display->last_mouse_click_pos.x,
-                                display->last_mouse_click_pos.y,
+                                world_mouse_pos.x,
+                                world_mouse_pos.y,
                                 sfCircleShape_getRadius(sim->editor.tool_circle),
                                 20,
                                 BODY_DEFAULT_MASS,
@@ -71,7 +73,7 @@ void sim_poll_events(Sim *sim)
                         break;
                     case sfKeyE :
                         sim->editor_enabled = !sim->editor_enabled;
-                        sim->editor.new_body_mass = 1;
+                        sim->editor.new_body_mass = BODY_DEFAULT_MASS;
                         if(sim->editor.tool_circle == NULL) // Create tool circle shape once
                         {
                             const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
@@ -206,8 +208,9 @@ void sim_handle_left_click(Sim *sim)
             sim->display.mouse_was_on_body = sfTrue;
             break;
         }
-        else
+        else // Mouse was not on body
         {
+            sim->editor.selected_body = NULL;
             sim->following_selected_body = sfFalse;
             sim->following_largest_body = sfFalse;
             sim->display.mouse_was_on_body = sfFalse;
@@ -294,8 +297,7 @@ void sim_render_gui(Sim *sim)
 
 void sim_update(Sim *sim)
 {
-    //sim_apply_gravitation_forces(sim->bodies);
-    sim_apply_interatomic_forces(sim->bodies);
+    GRAVITATIONAL_SIM ? sim_apply_gravitation_forces(sim->bodies) : sim_apply_interatomic_forces(sim->bodies);
     sfUint32 largest_mass = 0;
     if(sim->largest_body != NULL)
     {

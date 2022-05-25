@@ -5,6 +5,7 @@
 #define GRAVITATIONAL_CONSTANT 6.67e-1f
 #define HAMAKER_COEFF 1e11f
 #define EPSILON_0 1.0e-3f
+#define GRAVITATIONAL_SIM 0
 #define VELOCITY_LIMITED 1
 #define BODY_SPLITTING_ENABLED 0
 #define DISTANCE_THRESHOLD 3000.f // Maximum distance of gravitational force calculation

@@ -60,12 +60,12 @@ void editor_init_gui(Editor *editor, Display *display)
 void editor_render(Sim *sim)
 {
     const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(sim->display.render_window);
-    const sfVector2f world_mouse_pos = sfRenderWindow_mapPixelToCoords(sim->display.render_window, mouse_pos, sim->display.view);
     // Editor velocity line
     if(sfMouse_isButtonPressed(sfMouseLeft) &&
     !sim->editor.circle_mode_enabled &&
     sim->editor.selected_body_pos.x != 0.f &&
-    sim->editor.selected_body_pos.y != 0.f)
+    sim->editor.selected_body_pos.y != 0.f &&
+    sim->editor.selected_body != NULL)
     {
         sfVertex vertex1 = {
             .color = sfWhite,
@@ -79,7 +79,19 @@ void editor_render(Sim *sim)
     }
     // Circle tool drawing
     editor_render_circle_tool(sim, mouse_pos);
-    // Body preview
+    // Circle tool mass text
+    if(!sim->editor.circle_mode_enabled)
+    {
+        sfRenderWindow_drawCircleShape(sim->display.render_window, sim->editor.body_preview_circle, NULL); 
+        sfRenderWindow_drawText(sim->display.render_window, sim->editor.new_body_mass_text, NULL);
+    }
+}
+
+void editor_update(Sim *sim)
+{
+    const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(sim->display.render_window);
+    const sfVector2f world_mouse_pos = sfRenderWindow_mapPixelToCoords(sim->display.render_window, mouse_pos, sim->display.view);
+    // Update body preview
     sfCircleShape_setRadius(sim->editor.body_preview_circle, sim->editor.new_body_mass / BODY_RADIUS_FACTOR);
     const sfVector2f new_preview_pos = 
         {
@@ -90,11 +102,17 @@ void editor_render(Sim *sim)
         sim->editor.body_preview_circle,
         new_preview_pos
     );
+    // New body mass text
     if(!sim->editor.circle_mode_enabled)
     {
-        sfRenderWindow_drawCircleShape(sim->display.render_window, sim->editor.body_preview_circle, NULL);
+        const sfVector2f text_scale = {sim->display.zoom_level, sim->display.zoom_level};
         sfText_setPosition(sim->editor.new_body_mass_text, new_preview_pos);
-        sfRenderWindow_drawText(sim->display.render_window, sim->editor.new_body_mass_text, NULL);
+        sfText_setScale(sim->editor.new_body_mass_text, text_scale);
+        const sfFloatRect text_bounds = sfText_getGlobalBounds(sim->editor.new_body_mass_text);
+        sfVector2f new_pos;
+        new_pos.x = new_preview_pos.x + sim->editor.new_body_mass / BODY_RADIUS_FACTOR - text_bounds.width / 2;
+        new_pos.y = new_preview_pos.y + sim->editor.new_body_mass / BODY_RADIUS_FACTOR;
+        sfText_setPosition(sim->editor.new_body_mass_text, new_pos);
     }
 }
 
