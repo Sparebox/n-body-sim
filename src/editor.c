@@ -44,7 +44,7 @@ void editor_init_gui(Editor *editor, Display *display)
     sfText_setPosition(editor->create_circle_text, pos);
 
     editor->new_body_mass_text = sfText_create();
-    sfText_setString(editor->new_body_mass_text, "MASS");
+    sfText_setString(editor->new_body_mass_text, "Mass:");
     sfText_setFont(editor->new_body_mass_text, display->font);
     sfText_setColor(editor->new_body_mass_text, sfRed);
     sfText_setScale(editor->new_body_mass_text, scale);
@@ -102,7 +102,7 @@ void editor_update(Sim *sim)
         sim->editor.body_preview_circle,
         new_preview_pos
     );
-    // New body mass text
+    // Update new body mass text
     if(!sim->editor.circle_mode_enabled)
     {
         const sfVector2f text_scale = {sim->display.zoom_level, sim->display.zoom_level};
@@ -157,8 +157,8 @@ void editor_apply_velocity(Editor *editor, Display *display)
     const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
     const sfVector2i selected_body_screen_pos = 
         sfRenderWindow_mapCoordsToPixel(display->render_window, editor->selected_body_pos, display->view);
-    editor->selected_body->vel[0] += selected_body_screen_pos.x - mouse_pos.x;
-    editor->selected_body->vel[1] += selected_body_screen_pos.y - mouse_pos.y;
+    editor->selected_body->vel[0] = selected_body_screen_pos.x - mouse_pos.x;
+    editor->selected_body->vel[1] = selected_body_screen_pos.y - mouse_pos.y;
 }
 
 void editor_destroy(Editor *editor)

@@ -4,6 +4,9 @@
 #include "sim.h"
 #include "editor.h"
 
+static void handle_left_click(Sim *sim);
+static void handle_mouse_scroll(Sim *sim, sfEvent *event);
+
 void sim_poll_events(Sim *sim) 
 {
     sfEvent event;
@@ -17,13 +20,13 @@ void sim_poll_events(Sim *sim)
                 sfRenderWindow_close(window);
                 break;
             case sfEvtMouseWheelScrolled :
-                sim_handle_mouse_scroll(sim, &event);
+                handle_mouse_scroll(sim, &event);
                 break;
             case sfEvtMouseButtonPressed :
                 display->last_mouse_click_pos = sfMouse_getPositionRenderWindow(window);
                 if(event.mouseButton.button == sfMouseLeft)
                 {
-                    sim_handle_left_click(sim);
+                    handle_left_click(sim);
                 }
                 else if(event.mouseButton.button == sfMouseRight)
                 {
@@ -130,7 +133,7 @@ void sim_poll_events(Sim *sim)
     }
 }
 
-void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
+void handle_mouse_scroll(Sim *sim, sfEvent *event)
 {
     if(sim->editor_enabled)
     {
@@ -181,7 +184,7 @@ void sim_handle_mouse_scroll(Sim *sim, sfEvent *event)
     }
 }
 
-void sim_handle_left_click(Sim *sim)
+void handle_left_click(Sim *sim)
 {
     const sfVector2f world_mouse_pos = 
     sfRenderWindow_mapPixelToCoords(sim->display.render_window, sim->display.last_mouse_click_pos, sim->display.view);
@@ -297,6 +300,10 @@ void sim_render_gui(Sim *sim)
 
 void sim_update(Sim *sim)
 {
+    if(sim->paused)
+    {
+        return;
+    }
     GRAVITATIONAL_SIM ? sim_apply_gravitation_forces(sim->bodies) : sim_apply_interatomic_forces(sim->bodies);
     sfUint32 largest_mass = 0;
     if(sim->largest_body != NULL)
@@ -305,7 +312,7 @@ void sim_update(Sim *sim)
     }
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
-        if(sim->bodies[i].shape != NULL && !sim->paused)
+        if(sim->bodies[i].shape != NULL)
         {
             if(sim->bodies[i].mass > largest_mass)
             {
@@ -320,7 +327,7 @@ void sim_update(Sim *sim)
     }
     Body *possible_collisions[MAX_BODIES << 1] = { 0 };
     sim->possible_collisions = body_sweep_and_prune(sim->bodies, possible_collisions);
-    body_check_collisions(&sim->display, possible_collisions, sim->bodies, &sim->num_of_bodies);
+    body_check_collisions(possible_collisions, sim->bodies, &sim->num_of_bodies);
 }
 
 void sim_render(Sim *sim)
@@ -572,6 +579,11 @@ void sim_van_der_waals_force(mfloat_t *result, Body *a, Body *b, float dist2, mf
     const float magnitude = (HAMAKER_COEFF * 64 * powf(a_radius, 3) * powf(b_radius, 3) * sqrtf(dist2))
                             / (6 * (powf(dist2 - powf(a_radius + b_radius, 2), 2) * powf(dist2 - powf(a_radius - b_radius, 2), 2)));
     vec2_multiply_f(result, direction, magnitude);
+}
+
+sfVector2f sim_to_sf_vector(mfloat_t *vec2)
+{
+    return (sfVector2f) {vec2[0], vec2[1]};
 }
 
 void sim_destroy(Sim *sim)

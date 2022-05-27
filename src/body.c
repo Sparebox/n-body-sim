@@ -8,6 +8,9 @@
 #include "SFML/Graphics.h"
 
 static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time);
+static void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies);
+static void solve_bounce_collision(Body *a, Body *b);
+static int compare_x_axis(const void *a, const void *b);
 
 void body_update(Body *body, float delta_time)
 {
@@ -48,7 +51,7 @@ void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time)
 }
 
 
-int body_compare_x_axis(const void *a, const void *b)
+int compare_x_axis(const void *a, const void *b)
 {
     Body **A = ((Body**)a);
     Body **B = ((Body**)b);
@@ -80,7 +83,7 @@ sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
             sorted_bodies[i] = &bodies[i];
         }
     }
-    qsort(sorted_bodies, MAX_BODIES, sizeof(Body*), body_compare_x_axis); // Sort bodies by x-axis
+    qsort(sorted_bodies, MAX_BODIES, sizeof(Body*), compare_x_axis); // Sort bodies by x-axis
     Body *active_intervals[MAX_BODIES] = { 0 };
     Body *last_active = NULL;
     active_intervals[0] = sorted_bodies[0];
@@ -133,94 +136,71 @@ sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
     return (sfUint32) possible_index;
 }
 
-void body_solve_collision(Display *display, Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
+void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies)
 {
-    mfloat_t impact_dir[VEC2_SIZE];
     mfloat_t a_pos[VEC2_SIZE];
     mfloat_t b_pos[VEC2_SIZE];
     body_get_position(a, a_pos);
     body_get_position(b, b_pos);
-    vec2_subtract(impact_dir, a_pos, b_pos);
-    vec2_normalize(impact_dir, impact_dir);
-    
-    mfloat_t vel_diff[VEC2_SIZE];
-    vec2_subtract(vel_diff, a->vel, b->vel);
-    const float speed_diff2 = vec2_length_squared(vel_diff);
     Body *major_mass = a->mass > b->mass ? a : b; // if mass A is bigger then split A else split B
-    Body *minor_mass = major_mass == a ? b : a;
-    if(speed_diff2 > BODY_SPLIT_VELOCITY * BODY_SPLIT_VELOCITY &&
-        major_mass->mass > 1 &&
-        abs(minor_mass->mass - major_mass->mass) < 100e3 && 
-        BODY_SPLITTING_ENABLED)
-    {
-        mfloat_t m1v1[VEC2_SIZE];
-        mfloat_t m2v2[VEC2_SIZE];
-        mfloat_t new_vel[VEC2_SIZE];
-        mfloat_t separating_vel[VEC2_SIZE];
-        
-        vec2_multiply_f(m1v1, minor_mass->vel, minor_mass->mass);
-        vec2_multiply_f(m2v2, major_mass->vel, major_mass->mass);
-        vec2_add(new_vel, m1v1, m2v2);
-        vec2_divide_f(new_vel, new_vel, minor_mass->mass + major_mass->mass);
-        const sfVector2f major_mass_pos = sfCircleShape_getPosition(major_mass->shape);
-        Body *new1 = body_create(
-            display, bodies,
-            num_of_bodies,
-            major_mass_pos.x,
-            major_mass_pos.y,
-            (major_mass->mass + minor_mass->mass) / 2
-        );
-        Body *new2 = body_create(display,
-            bodies,
-            num_of_bodies,
-            major_mass_pos.x,
-            major_mass_pos.y,
-            (major_mass->mass + minor_mass->mass) / 2
-        );
-        sfVector2f offset = { 0 };
-        const float major_mass_radius = sfCircleShape_getRadius(major_mass->shape);
-        vec2_rotate(separating_vel, impact_dir, MPI_2);
-        offset.x = separating_vel[0] * major_mass_radius * 2;
-        offset.y = separating_vel[1] * major_mass_radius * 2;
-        sfCircleShape_move(new1->shape, offset);
-        vec2_add(new1->vel, separating_vel, new_vel);
-        vec2_rotate(separating_vel, impact_dir, -MPI_2);
-        offset.x = separating_vel[0] * major_mass_radius * 2;
-        offset.y = separating_vel[1] * major_mass_radius * 2;
-        sfCircleShape_move(new2->shape, offset);
-        vec2_add(new2->vel, separating_vel, new_vel);
-        body_destroy(major_mass, bodies, num_of_bodies);
-        body_destroy(minor_mass, bodies, num_of_bodies);
-    }
-    else // Bodies combine into one
-    {
-        mfloat_t m1v1[VEC2_SIZE];
-        mfloat_t m2v2[VEC2_SIZE];
-        mfloat_t new_vel[VEC2_SIZE];
-        vec2_multiply_f(m1v1, a->vel, a->mass);
-        vec2_multiply_f(m2v2, b->vel, b->mass);
-        vec2_add(new_vel, m1v1, m2v2);
-        vec2_divide_f(new_vel, new_vel, a->mass + b->mass);
-        vec2_assign(major_mass->vel, new_vel);
-        body_apply_mass(major_mass, a->mass + b->mass);
-        // Calculate new color
-        const float normalized_a_mass = (float) a->mass / (float) (a->mass + b->mass);
-        const float normalized_b_mass = (float) b->mass / (float) (a->mass + b->mass);
-        sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r * normalized_a_mass;
-        red_average += sfCircleShape_getFillColor(b->shape).r * normalized_b_mass;
-        sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b * normalized_a_mass;
-        blue_average += sfCircleShape_getFillColor(b->shape).b * normalized_b_mass;
-        sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g * normalized_a_mass;
-        green_average += sfCircleShape_getFillColor(b->shape).g * normalized_b_mass;
-        const sfColor new_color = sfColor_fromRGB(red_average, green_average, blue_average);
-        sfCircleShape_setFillColor(major_mass->shape, new_color);
-        major_mass->trail.color = new_color;
+    
+    // Bodies combine into one
+    mfloat_t m1v1[VEC2_SIZE];
+    mfloat_t m2v2[VEC2_SIZE];
+    mfloat_t new_vel[VEC2_SIZE];
+    vec2_multiply_f(m1v1, a->vel, a->mass);
+    vec2_multiply_f(m2v2, b->vel, b->mass);
+    vec2_add(new_vel, m1v1, m2v2);
+    vec2_divide_f(new_vel, new_vel, a->mass + b->mass);
+    vec2_assign(major_mass->vel, new_vel);
+    body_apply_mass(major_mass, a->mass + b->mass);
 
-        body_destroy(major_mass == a ? b : a, bodies, num_of_bodies);
-    }
+    // Calculate new color
+    const float normalized_a_mass = (float) a->mass / (float) (a->mass + b->mass);
+    const float normalized_b_mass = (float) b->mass / (float) (a->mass + b->mass);
+    sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r * normalized_a_mass;
+    red_average += sfCircleShape_getFillColor(b->shape).r * normalized_b_mass;
+    sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b * normalized_a_mass;
+    blue_average += sfCircleShape_getFillColor(b->shape).b * normalized_b_mass;
+    sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g * normalized_a_mass;
+    green_average += sfCircleShape_getFillColor(b->shape).g * normalized_b_mass;
+    const sfColor new_color = sfColor_fromRGB(red_average, green_average, blue_average);
+    sfCircleShape_setFillColor(major_mass->shape, new_color);
+    major_mass->trail.color = new_color;
+
+    body_destroy(major_mass == a ? b : a, bodies, num_of_bodies);
 }
 
-void body_check_collisions(Display *display, Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies)
+void solve_bounce_collision(Body *a, Body *b)
+{
+    mfloat_t a_pos[VEC2_SIZE];
+    mfloat_t b_pos[VEC2_SIZE];
+    mfloat_t normal[VEC2_SIZE];
+    mfloat_t offset[VEC2_SIZE];
+    // Remove intersection of bodies
+    body_get_position(a, a_pos);
+    body_get_position(b, b_pos);
+    const float distance = vec2_distance(a_pos, b_pos);
+    const float a_radius = sfCircleShape_getRadius(a->shape);
+    const float b_radius = sfCircleShape_getRadius(b->shape);
+    vec2_subtract(normal, a_pos, b_pos);
+    vec2_normalize(normal, normal);
+    vec2_multiply_f(offset, normal, a_radius + b_radius - distance);
+    vec2_add(a_pos, a_pos, offset);
+    sfCircleShape_setPosition(a->shape, sim_to_sf_vector(a_pos));
+    // Apply impulse
+    mfloat_t rel_vel[VEC2_SIZE];
+    mfloat_t impulse_a[VEC2_SIZE];
+    mfloat_t impulse_b[VEC2_SIZE];
+    vec2_subtract(rel_vel, a->vel, b->vel);
+    const float impulse = 0.99f * vec2_dot(rel_vel, normal) / (1.f / a->mass) + (1.f / b->mass);
+    vec2_multiply_f(impulse_a, normal, impulse / a->mass);
+    vec2_multiply_f(impulse_b, normal, impulse / b->mass);
+    vec2_subtract(a->vel, a->vel, impulse_a);
+    vec2_add(b->vel, b->vel, impulse_b);
+}
+
+void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies)
 {
     Body *a = NULL;
     Body *b = NULL;
@@ -254,7 +234,8 @@ void body_check_collisions(Display *display, Body **possible_collisions, Body *b
             radius_b = sfCircleShape_getRadius(b->shape);
             if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                body_solve_collision(display, a, b, bodies, num_of_bodies);
+                //solve_merge_collision(a, b, bodies, num_of_bodies);
+                solve_bounce_collision(a, b);
                 break;
             }
         }

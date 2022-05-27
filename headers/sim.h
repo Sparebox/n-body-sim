@@ -6,8 +6,7 @@
 #define HAMAKER_COEFF 1e11f
 #define EPSILON_0 1.0e-3f
 #define GRAVITATIONAL_SIM 0
-#define VELOCITY_LIMITED 1
-#define BODY_SPLITTING_ENABLED 0
+#define VELOCITY_LIMITED 0
 #define DISTANCE_THRESHOLD 3000.f // Maximum distance of gravitational force calculation
 
 typedef struct {
@@ -68,11 +67,10 @@ sfInt32 sim_random_int(sfInt32 min, sfInt32 max);
 float sim_random_float(float min, float max);
 void sim_random_vector(mfloat_t *result, sfUint32 min_length, sfUint32 max_length);
 void sim_poll_events(Sim *sim);
-void sim_handle_left_click(Sim *sim);
-void sim_handle_mouse_scroll(Sim *sim, sfEvent *event);
 sfText* sim_create_text(sfVector2f pos, sfVector2f scale, sfFont *font);
 void sim_apply_gravitation_forces(Body *bodies);
 void sim_gravitation_force(mfloat_t *result, Body *a, Body *b, float dist2);
 void sim_apply_interatomic_forces(Body *bodies);
 void sim_coulombic_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat_t *direction);
 void sim_van_der_waals_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat_t *direction);
+sfVector2f sim_to_sf_vector(mfloat_t *vec2);
