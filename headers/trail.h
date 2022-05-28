@@ -12,3 +12,4 @@ typedef struct {
 
 void trail_append(Trail *trail, float x, float y);
 void trail_render(Display *display, Trail *trail);
+void trail_reset(Trail *trail);

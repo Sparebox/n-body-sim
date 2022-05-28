@@ -53,7 +53,8 @@ void editor_init_gui(Editor *editor, Display *display)
     sfCircleShape_setFillColor(editor->body_preview_circle, sfTransparent);
     sfCircleShape_setOutlineColor(editor->body_preview_circle, sfWhite);
     sfCircleShape_setOutlineThickness(editor->body_preview_circle, CIRCLE_TOOL_LINE_THICKNESS);
-    
+
+    editor->new_body_mass = BODY_DEFAULT_MASS;
 }
 
 

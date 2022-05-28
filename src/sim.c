@@ -6,6 +6,7 @@
 
 static void handle_left_click(Sim *sim);
 static void handle_mouse_scroll(Sim *sim, sfEvent *event);
+static void update_gui(void *sim);
 
 void sim_poll_events(Sim *sim) 
 {
@@ -76,7 +77,6 @@ void sim_poll_events(Sim *sim)
                         break;
                     case sfKeyE :
                         sim->editor_enabled = !sim->editor_enabled;
-                        sim->editor.new_body_mass = BODY_DEFAULT_MASS;
                         if(sim->editor.tool_circle == NULL) // Create tool circle shape once
                         {
                             const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
@@ -242,6 +242,9 @@ void handle_left_click(Sim *sim)
 
 void sim_init_gui(Sim *sim)
 {
+    // Create separate thread for GUI updates
+    sim->gui_update_thread = sfThread_create(update_gui, sim);
+    sim->mutex = sfMutex_create();
     sfVector2f scale = {0.5f, 0.5f};
     sfVector2f pos = {0.f, 0.f};
     Display *const display = &sim->display;
@@ -256,35 +259,48 @@ void sim_init_gui(Sim *sim)
     sim->possible_collisions_text = sim_create_text(pos, scale, display->font);
     pos.y += 15.f;
     sim->paused_text = sim_create_text(pos, scale, display->font);
+    editor_init_gui(&sim->editor, &sim->display);
+    sfThread_launch(sim->gui_update_thread);
 }
 
-void sim_update_gui(Sim *sim)
+void update_gui(void *sim_data)
 {
-    char string[32];
-    sprintf(string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
-    sfText_setString(sim->fps_text, string);
-
-    sprintf(string, "BODIES %d / %d", sim->num_of_bodies, MAX_BODIES);
-    sfText_setString(sim->bodies_text, string);
-
-    if(sim->largest_body != NULL)
+    Sim *sim =  (Sim*) sim_data;
+    while(sfRenderWindow_isOpen(sim->display.render_window))
     {
-        sprintf(string, "LARGEST MASS %d", sim->largest_body->mass);
-    }
-    else
-    {
-        sprintf(string, "LARGEST MASS ");
-    }
-    sfText_setString(sim->largest_mass_text, string);
-    
-    sprintf(string, "ZOOMOUT %.1f", sim->display.zoom_level);
-    sfText_setString(sim->zoom_text, string);
+        char string[32];
+        sprintf(string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
+        sfText_setString(sim->fps_text, string);
 
-    sprintf(string, "POSSIBLE COLLISIONS %d", sim->possible_collisions);
-    sfText_setString(sim->possible_collisions_text, string);
+        sprintf(string, "BODIES %d / %d", sim->num_of_bodies, MAX_BODIES);
+        sfText_setString(sim->bodies_text, string);
 
-    sprintf(string, sim->paused ? "PAUSED" : sim->editor_enabled ? "EDITOR" : "RUNNING");
-    sfText_setString(sim->paused_text, string);
+        if(sim->largest_body != NULL)
+        {
+            sprintf(string, "LARGEST MASS %d", sim->largest_body->mass);
+        }
+        else
+        {
+            sprintf(string, "LARGEST MASS ");
+        }
+        sfText_setString(sim->largest_mass_text, string);
+        
+        sprintf(string, "ZOOMOUT %.1f", sim->display.zoom_level);
+        sfText_setString(sim->zoom_text, string);
+
+        sprintf(string, "POSSIBLE COLLISIONS %d", sim->possible_collisions);
+        sfText_setString(sim->possible_collisions_text, string);
+
+        sprintf(string, sim->paused ? "PAUSED" : sim->editor_enabled ? "EDITOR" : "RUNNING");
+        sfText_setString(sim->paused_text, string);
+        
+        if(sim->editor_enabled)
+        {
+            sfMutex_lock(sim->mutex);
+            editor_update(sim);
+            sfMutex_unlock(sim->mutex);
+        }
+    }
 }
 
 void sim_render_gui(Sim *sim)
@@ -300,7 +316,7 @@ void sim_render_gui(Sim *sim)
 
 void sim_update(Sim *sim)
 {
-    if(sim->paused)
+    if(sim->paused || sim->editor_enabled)
     {
         return;
     }
@@ -348,13 +364,17 @@ void sim_render(Sim *sim)
     {
         if(sim->bodies[i].shape != NULL)
         {
-            body_render(&sim->display, &sim->bodies[i]);
+            body_render(&sim->display, &sim->bodies[i], &sim->editor_enabled);
         }
     }
     if(sim->editor_enabled)
     {
+        sfMutex_lock(sim->mutex);
         editor_render(sim);
+        sfMutex_unlock(sim->mutex);
+        editor_render_gui(&sim->editor, &sim->display);
     }
+    sim_render_gui(sim);
 }
 
 sfText* sim_create_text(sfVector2f pos, sfVector2f scale, sfFont *font)
@@ -605,5 +625,7 @@ void sim_destroy(Sim *sim)
     sfText_destroy(sim->paused_text);
     sfClock_destroy(sim->delta_clock);
     display_destroy(&sim->display);
+    sfThread_destroy(sim->gui_update_thread);
+    sfMutex_destroy(sim->mutex);
     free(sim);
 }

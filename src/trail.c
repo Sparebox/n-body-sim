@@ -42,3 +42,11 @@ void trail_render(Display *display, Trail *trail)
         }
     }
 }
+
+void trail_reset(Trail *trail)
+{
+    for(size_t i = 0; i < MAX_TRAIL_VERTICES; i++)
+    {
+        trail->vertices[i].color = sfTransparent;
+    }
+}

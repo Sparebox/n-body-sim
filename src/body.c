@@ -7,12 +7,12 @@
 #include "trail.h"
 #include "SFML/Graphics.h"
 
-static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time);
+static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta_time);
 static void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies);
 static void solve_bounce_collision(Body *a, Body *b);
 static int compare_x_axis(const void *a, const void *b);
 
-void body_update(Body *body, float delta_time)
+void body_update(Body *body, const float delta_time)
 {
     // Trail
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
@@ -20,6 +20,7 @@ void body_update(Body *body, float delta_time)
     // Velocity verlet integration
     mfloat_t new_pos_result[VEC2_SIZE];
     velocity_verlet_integerate(body, new_pos_result, delta_time);
+    sfVector2f new_pos = {new_pos_result[0], new_pos_result[1]};
     //Limit speed
     if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
     {
@@ -27,12 +28,11 @@ void body_update(Body *body, float delta_time)
         vec2_multiply_f(body->vel, body->vel, BODY_SPEED_LIMIT);
     }
     // Move body 
-    const sfVector2f new_pos = {new_pos_result[0], new_pos_result[1]};
     sfCircleShape_setPosition(body->shape, new_pos);
     sfText_setPosition(body->info_text, new_pos);
 }
 
-void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time)
+void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta_time)
 {
     mfloat_t pos[VEC2_SIZE];
     mfloat_t temp[VEC2_SIZE];
@@ -49,7 +49,6 @@ void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, float delta_time)
 
     vec2_zero(body->acc);
 }
-
 
 int compare_x_axis(const void *a, const void *b)
 {
@@ -193,7 +192,7 @@ void solve_bounce_collision(Body *a, Body *b)
     mfloat_t impulse_a[VEC2_SIZE];
     mfloat_t impulse_b[VEC2_SIZE];
     vec2_subtract(rel_vel, a->vel, b->vel);
-    const float impulse = 0.99f * vec2_dot(rel_vel, normal) / (1.f / a->mass) + (1.f / b->mass);
+    const float impulse = RESTITUTION_COEFF * vec2_dot(rel_vel, normal) / (1.f / a->mass) + (1.f / b->mass);
     vec2_multiply_f(impulse_a, normal, impulse / a->mass);
     vec2_multiply_f(impulse_b, normal, impulse / b->mass);
     vec2_subtract(a->vel, a->vel, impulse_a);
@@ -234,8 +233,8 @@ void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *n
             radius_b = sfCircleShape_getRadius(b->shape);
             if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                //solve_merge_collision(a, b, bodies, num_of_bodies);
-                solve_bounce_collision(a, b);
+                BOUNCY_COLLISIONS ? solve_bounce_collision(a, b) : 
+                solve_merge_collision(a, b, bodies, num_of_bodies);
                 break;
             }
         }
@@ -274,12 +273,12 @@ void body_get_position(Body *body, mfloat_t *result)
 }
 
 
-void body_render(Display *display, Body *body)
+void body_render(Display *display, Body *body, sfBool *editor_enabled)
 {
     const sfVector2i screen_pos = 
         sfRenderWindow_mapCoordsToPixel(display->render_window, sfCircleShape_getPosition(body->shape), display->view);
     const sfIntRect viewport = {0, 0, WIN_WIDTH, WIN_HEIGHT};
-    if(!sfIntRect_contains(&viewport, screen_pos.x, screen_pos.y)) // Body is not in window
+    if(!sfIntRect_contains(&viewport, screen_pos.x, screen_pos.y)) // If body is not in window don't render
     {
         return;
     }
@@ -292,14 +291,15 @@ void body_render(Display *display, Body *body)
     const sfVector2f mouse_w_pos = 
         sfRenderWindow_mapPixelToCoords(display->render_window, sfMouse_getPositionRenderWindow(display->render_window), display->view);
     const sfFloatRect bounds = sfCircleShape_getGlobalBounds(body->shape);
-    if(sfFloatRect_contains(&bounds, mouse_w_pos.x, mouse_w_pos.y))
+    // Show info text if mouse is on body and not in editor
+    if(sfFloatRect_contains(&bounds, mouse_w_pos.x, mouse_w_pos.y) && !(*editor_enabled))
     {
         sfText_setScale(body->info_text, text_scale);
         text_bounds = sfText_getGlobalBounds(body->info_text);
         offset.x = body_pos.x - text_bounds.width / 2;
         offset.y = body_pos.y;
         sfText_setPosition(body->info_text, offset);
-        sfRenderWindow_drawText(display->render_window,        body->info_text, NULL);
+        sfRenderWindow_drawText(display->render_window, body->info_text, NULL);
     }
 }
 

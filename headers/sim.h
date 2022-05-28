@@ -3,11 +3,14 @@
 #include "body.h"
 #define MAX_BODIES 4096
 #define GRAVITATIONAL_CONSTANT 6.67e-1f
-#define HAMAKER_COEFF 1e11f
-#define EPSILON_0 1.0e-3f
-#define GRAVITATIONAL_SIM 0
-#define VELOCITY_LIMITED 0
-#define DISTANCE_THRESHOLD 3000.f // Maximum distance of gravitational force calculation
+#define HAMAKER_COEFF 1e11f // Van Der Waals forces
+#define EPSILON_0 1.0e-3f   // Coulombic forces
+#define GRAVITATIONAL_SIM 1
+#define BOUNCY_COLLISIONS 0
+#define RESTITUTION_COEFF 0.99f
+#define VELOCITY_LIMITED 1
+#define BODY_SPEED_LIMIT 200.f // Pixels per second
+#define DISTANCE_THRESHOLD 2000.f // Maximum distance of gravitational force calculation
 
 typedef struct {
     sfText *editor_text;
@@ -39,6 +42,8 @@ typedef struct {
     sfBool following_selected_body;
     sfBool paused;
     sfBool editor_enabled;
+    sfThread *gui_update_thread;
+    sfMutex *mutex;
     Display display;
     Editor editor;
     Body *largest_body;
@@ -47,7 +52,6 @@ typedef struct {
 } Sim;
 
 void sim_init_gui(Sim *sim);
-void sim_update_gui(Sim *sim);
 void sim_render_gui(Sim *sim);
 void sim_update(Sim *sim);
 void sim_render(Sim *sim);
