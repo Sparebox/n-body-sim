@@ -5,7 +5,6 @@
 #include "body.h"
 #include "sim.h"
 #include "trail.h"
-#include "SFML/Graphics.h"
 
 static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta_time);
 static void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies);
@@ -44,9 +43,11 @@ void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta
     vec2_multiply_f(temp, body->acc, delta_time * delta_time * 0.5f);
     vec2_add(new_pos, new_pos, temp);
     // New velocity
-    vec2_multiply_f(temp, body->acc, delta_time * 0.5f);
+    vec2_add(temp, body->acc, body->last_acc);
+    vec2_multiply_f(temp, temp, delta_time * 0.5f);
     vec2_add(body->vel, temp, body->vel);
 
+    vec2_assign(body->last_acc, body->acc);
     vec2_zero(body->acc);
 }
 
@@ -73,7 +74,7 @@ int compare_x_axis(const void *a, const void *b)
 
 sfUint32 body_sweep_and_prune(Body *bodies, Body **possible_collisions)
 {
-    memset(possible_collisions, 0, MAX_BODIES * sizeof(NULL));
+    memset(possible_collisions, 0, MAX_BODIES * sizeof(Body*));
     Body *sorted_bodies[MAX_BODIES] = { 0 };
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
@@ -155,14 +156,12 @@ void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodi
     body_apply_mass(major_mass, a->mass + b->mass);
 
     // Calculate new color
-    const float normalized_a_mass = (float) a->mass / (float) (a->mass + b->mass);
-    const float normalized_b_mass = (float) b->mass / (float) (a->mass + b->mass);
-    sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r * normalized_a_mass;
-    red_average += sfCircleShape_getFillColor(b->shape).r * normalized_b_mass;
-    sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b * normalized_a_mass;
-    blue_average += sfCircleShape_getFillColor(b->shape).b * normalized_b_mass;
-    sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g * normalized_a_mass;
-    green_average += sfCircleShape_getFillColor(b->shape).g * normalized_b_mass;
+    sfUint16 red_average = sfCircleShape_getFillColor(a->shape).r + sfCircleShape_getFillColor(b->shape).r;
+    red_average /= 2.f;
+    sfUint16 blue_average = sfCircleShape_getFillColor(a->shape).b + sfCircleShape_getFillColor(b->shape).b;
+    blue_average /= 2.f;
+    sfUint16 green_average = sfCircleShape_getFillColor(a->shape).g + sfCircleShape_getFillColor(b->shape).g;
+    green_average /= 2.f;
     const sfColor new_color = sfColor_fromRGB(red_average, green_average, blue_average);
     sfCircleShape_setFillColor(major_mass->shape, new_color);
     major_mass->trail.color = new_color;
@@ -192,14 +191,16 @@ void solve_bounce_collision(Body *a, Body *b)
     mfloat_t impulse_a[VEC2_SIZE];
     mfloat_t impulse_b[VEC2_SIZE];
     vec2_subtract(rel_vel, a->vel, b->vel);
-    const float impulse = RESTITUTION_COEFF * vec2_dot(rel_vel, normal) / (1.f / a->mass) + (1.f / b->mass);
-    vec2_multiply_f(impulse_a, normal, impulse / a->mass);
+    const float a_inv_mass = 1.f / a->mass;
+    const float b_inv_mass = 1.f / b->mass;
+    const float impulse = (RESTITUTION_COEFF * vec2_dot(rel_vel, normal)) / (a_inv_mass + b_inv_mass);
+    vec2_multiply_f(impulse_a, normal, -impulse / a->mass);
     vec2_multiply_f(impulse_b, normal, impulse / b->mass);
-    vec2_subtract(a->vel, a->vel, impulse_a);
-    vec2_add(b->vel, b->vel, impulse_b);
+    vec2_assign(a->vel, impulse_a);
+    vec2_assign(b->vel, impulse_b);
 }
 
-void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies)
+void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies, sfUint32 *collision_type)
 {
     Body *a = NULL;
     Body *b = NULL;
@@ -233,8 +234,15 @@ void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *n
             radius_b = sfCircleShape_getRadius(b->shape);
             if(distance2 < (radius_a + radius_b) * (radius_a + radius_b))
             {
-                BOUNCY_COLLISIONS ? solve_bounce_collision(a, b) : 
-                solve_merge_collision(a, b, bodies, num_of_bodies);
+                switch(*collision_type)
+                {
+                    case BOUNCY_COLLISIONS:
+                        solve_bounce_collision(a, b);
+                        break;
+                    case MERGE_COLLISIONS:
+                        solve_merge_collision(a, b, bodies, num_of_bodies);
+                        break;
+                }
                 break;
             }
         }
@@ -284,6 +292,7 @@ void body_render(Display *display, Body *body, sfBool *editor_enabled)
     }
     trail_render(display, &body->trail);
     sfRenderWindow_drawCircleShape(display->render_window, body->shape, NULL);
+    
     sfFloatRect text_bounds = { 0 };
     sfVector2f offset = { 0 };
     const sfVector2f text_scale = {display->zoom_level, display->zoom_level};
@@ -322,7 +331,7 @@ Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float
     }
     if(body == NULL)
     {
-        printf("Body array is full!\n");
+        printf("Tried to overallocate body array!\n");
         return NULL;
     }
     const sfVector2f pos = {x, y};

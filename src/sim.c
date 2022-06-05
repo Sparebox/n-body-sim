@@ -1,12 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include "sim.h"
 #include "editor.h"
 
 static void handle_left_click(Sim *sim);
 static void handle_mouse_scroll(Sim *sim, sfEvent *event);
+static void init_gui(Sim *sim);
 static void update_gui(void *sim);
+static Body *possible_collisions[MAX_BODIES << 1];
+
+static sfBool sim_is_destroyed = sfFalse;
 
 void sim_poll_events(Sim *sim) 
 {
@@ -31,11 +36,7 @@ void sim_poll_events(Sim *sim)
                 }
                 else if(event.mouseButton.button == sfMouseRight)
                 {
-                    if(sim->editor_enabled)
-                    {
-
-                    }
-                    else
+                    if(!sim->editor_enabled)
                     {
                         sim->following_largest_body = !sim->following_largest_body;
                     }
@@ -46,9 +47,13 @@ void sim_poll_events(Sim *sim)
                 {
                     if(sim->editor_enabled)
                     {
-                        if(sim->editor.selected_body != NULL)
+                        if(sim->editor.selected_body != NULL && !sim->editor.torque_mode_enabled)
                         {
                             editor_apply_velocity(&sim->editor, display);
+                        }
+                        else if(sim->editor.torque_mode_enabled)
+                        {
+                            editor_apply_torque(sim);
                         }
                         if(sim->editor.circle_mode_enabled)
                         {
@@ -77,6 +82,7 @@ void sim_poll_events(Sim *sim)
                         break;
                     case sfKeyE :
                         sim->editor_enabled = !sim->editor_enabled;
+                        sim->editor.new_body_mass = BODY_DEFAULT_MASS;
                         if(sim->editor.tool_circle == NULL) // Create tool circle shape once
                         {
                             const sfVector2i mouse_pos = sfMouse_getPositionRenderWindow(display->render_window);
@@ -94,7 +100,7 @@ void sim_poll_events(Sim *sim)
                         if(sim->editor_enabled)
                         {
                             sim->largest_body = NULL;
-                            sim_create_random_distribution(sim, 1000, sfFalse);
+                            sim_create_random_distribution(sim, 1000, sfTrue);
                         }
                         break;
                     case sfKeyX :
@@ -113,6 +119,9 @@ void sim_poll_events(Sim *sim)
                                 sfRenderWindow_mapPixelToCoords(display->render_window, mouse_pos, display->view)
                             );
                         }
+                        break;
+                    case sfKeyT:
+                        sim->editor.torque_mode_enabled = !sim->editor.torque_mode_enabled;
                         break;
                     case sfKeyAdd :
                         sim->sim_speed_multiplier++;
@@ -225,7 +234,7 @@ void handle_left_click(Sim *sim)
         {
             sfCircleShape_setPosition(sim->editor.tool_circle, world_mouse_pos);
         }
-        else
+        else if(!sim->editor.torque_mode_enabled)
         {
             body_create(
                 &sim->display,
@@ -240,11 +249,18 @@ void handle_left_click(Sim *sim)
     
 }
 
-void sim_init_gui(Sim *sim)
+void sim_init(Sim *sim)
+{
+    sim->delta_clock = sfClock_create();
+    sim->sim_speed_multiplier = 1;
+    init_gui(sim);
+}
+
+void init_gui(Sim *sim)
 {
     // Create separate thread for GUI updates
     sim->gui_update_thread = sfThread_create(update_gui, sim);
-    sim->mutex = sfMutex_create();
+    sim->gui_mutex = sfMutex_create();
     sfVector2f scale = {0.5f, 0.5f};
     sfVector2f pos = {0.f, 0.f};
     Display *const display = &sim->display;
@@ -266,7 +282,8 @@ void sim_init_gui(Sim *sim)
 void update_gui(void *sim_data)
 {
     Sim *sim =  (Sim*) sim_data;
-    while(sfRenderWindow_isOpen(sim->display.render_window))
+    const sfTime sleep_duration = {.microseconds = 1.f/(30.f / 1e6)}; // 30 Updates per second
+    while(!sim_is_destroyed)
     {
         char string[32];
         sprintf(string, "FPS %.1f", 1.f / sfTime_asSeconds(sim->delta_time));
@@ -288,7 +305,7 @@ void update_gui(void *sim_data)
         sprintf(string, "ZOOMOUT %.1f", sim->display.zoom_level);
         sfText_setString(sim->zoom_text, string);
 
-        sprintf(string, "POSSIBLE COLLISIONS %d", sim->possible_collisions);
+        sprintf(string, "POSSIBLE COLLISIONS %d", sim->num_of_possible_collisions);
         sfText_setString(sim->possible_collisions_text, string);
 
         sprintf(string, sim->paused ? "PAUSED" : sim->editor_enabled ? "EDITOR" : "RUNNING");
@@ -296,10 +313,11 @@ void update_gui(void *sim_data)
         
         if(sim->editor_enabled)
         {
-            sfMutex_lock(sim->mutex);
+            sfMutex_lock(sim->gui_mutex);
             editor_update(sim);
-            sfMutex_unlock(sim->mutex);
+            sfMutex_unlock(sim->gui_mutex);
         }
+        sfSleep(sleep_duration);
     }
 }
 
@@ -320,7 +338,17 @@ void sim_update(Sim *sim)
     {
         return;
     }
-    GRAVITATIONAL_SIM ? sim_apply_gravitation_forces(sim->bodies) : sim_apply_interatomic_forces(sim->bodies);
+    switch(sim->sim_type)
+    {
+        case GRAVITATIONAL_SIM:
+            sim_apply_gravitation_forces(sim->bodies);
+            break;
+        case ATOMIC_FORCE_SIM:
+            sim_apply_interatomic_forces(sim->bodies);
+            break;
+        case ROTATIONAL_PHYSICS_SIM:
+            break;
+    }
     sfUint32 largest_mass = 0;
     if(sim->largest_body != NULL)
     {
@@ -341,9 +369,8 @@ void sim_update(Sim *sim)
             );
         }
     }
-    Body *possible_collisions[MAX_BODIES << 1] = { 0 };
-    sim->possible_collisions = body_sweep_and_prune(sim->bodies, possible_collisions);
-    body_check_collisions(possible_collisions, sim->bodies, &sim->num_of_bodies);
+    sim->num_of_possible_collisions = body_sweep_and_prune(sim->bodies, possible_collisions);
+    body_check_collisions(possible_collisions, sim->bodies, &sim->num_of_bodies, &sim->collision_type);
 }
 
 void sim_render(Sim *sim)
@@ -369,9 +396,9 @@ void sim_render(Sim *sim)
     }
     if(sim->editor_enabled)
     {
-        sfMutex_lock(sim->mutex);
+        sfMutex_lock(sim->gui_mutex);
         editor_render(sim);
-        sfMutex_unlock(sim->mutex);
+        sfMutex_unlock(sim->gui_mutex);
         editor_render_gui(&sim->editor, &sim->display);
     }
     sim_render_gui(sim);
@@ -394,7 +421,7 @@ void sim_create_circle(
     float radius, 
     sfUint32 count,
     sfUint32 mass,
-    sfBool stationary)
+    sfBool give_random_vel)
 {
     const float offset_radians =  2 * M_PI / count;
     float current_radians = 0;
@@ -407,7 +434,7 @@ void sim_create_circle(
         x = center_x + radius * cos(current_radians);
         y = center_y + radius * sin(current_radians);
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, x, y, mass);
-        if(!stationary)
+        if(give_random_vel)
         {
             sim_random_vector(rng_vel, 0, 1);
             vec2_assign(body->vel, rng_vel);
@@ -455,7 +482,7 @@ void sim_create_line(Sim *sim, float x1, float y1, float x2, float y2, float spa
     }
 }
 
-void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
+void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool give_random_vel)
 {
     srand((unsigned int)time(NULL));
     const sfVector2f view_size = sfView_getSize(sim->display.view);
@@ -470,7 +497,11 @@ void sim_create_random_distribution(Sim *sim, sfUint32 count, sfBool stationary)
     for(size_t i = 0; i < count; i++)
     {
         body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, pos[0], pos[1], BODY_DEFAULT_MASS);
-        if(!stationary)
+        if(body == NULL)
+        {
+            return;
+        }
+        if(give_random_vel)
         {
             sim_random_vector(rng_vel, 0.f, 50.f);
             vec2_assign(body->vel, rng_vel);
@@ -606,8 +637,51 @@ sfVector2f sim_to_sf_vector(mfloat_t *vec2)
     return (sfVector2f) {vec2[0], vec2[1]};
 }
 
+void sim_from_sf_vector(mfloat_t *result, const sfVector2f sf_vec)
+{
+    result[0] = sf_vec.x;
+    result[1] = sf_vec.y;
+}
+
+sfVector2f sim_closest_point_to_line(const sfVector2f _pos, const sfVector2f _a, const sfVector2f _b)
+{
+    mfloat_t pos[] = {_pos.x, _pos.y};
+    mfloat_t a[] = {_a.x, _a.y};
+    mfloat_t b[] = {_b.x, _b.y};
+    mfloat_t line_normal[VEC2_SIZE];
+    mfloat_t a_to_b[VEC2_SIZE];
+    vec2_subtract(a_to_b, b, a);
+    vec2_normalize(line_normal, a_to_b);
+    mfloat_t pos_to_a[VEC2_SIZE];
+    vec2_subtract(pos_to_a, a, pos);
+    mfloat_t pos_to_b[VEC2_SIZE];
+    vec2_subtract(pos_to_b, b, pos);
+    const float distance_from_a = vec2_dot(pos_to_a, line_normal);
+    if(distance_from_a > 0.f)
+    {
+        return _a;
+    }
+    const float distance_from_b = vec2_dot(pos_to_b, line_normal);
+    if(distance_from_b < 0.f)
+    {
+        return _b;
+    }
+    mfloat_t closest_point[VEC2_SIZE];
+    vec2_multiply_f(closest_point, line_normal, distance_from_a);
+    vec2_subtract(closest_point, pos_to_a, closest_point);
+    vec2_add(closest_point, closest_point, pos);
+    return (sfVector2f) {closest_point[0], closest_point[1]};
+}
+
+// Separating axis theorem collision check
+sfBool sim_sat_collision_check(Rot_body *a, Rot_body *b)
+{
+
+}
+
 void sim_destroy(Sim *sim)
 {
+    sim_is_destroyed = sfTrue;
     editor_destroy(&sim->editor);
     for(size_t i = 0; i < MAX_BODIES; i++)
     {
@@ -626,6 +700,6 @@ void sim_destroy(Sim *sim)
     sfClock_destroy(sim->delta_clock);
     display_destroy(&sim->display);
     sfThread_destroy(sim->gui_update_thread);
-    sfMutex_destroy(sim->mutex);
+    sfMutex_destroy(sim->gui_mutex);
     free(sim);
 }

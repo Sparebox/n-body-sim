@@ -7,6 +7,9 @@
         "windows.h": "c",
         "stddef.h": "c",
         "graphics.h": "c",
-        "limits": "c"
+        "limits": "c",
+        "rot_body.h": "c",
+        "sim.h": "c",
+        "display.h": "c"
     }
 }

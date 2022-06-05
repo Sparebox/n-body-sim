@@ -35,6 +35,10 @@ void display_handle_mouse_pan(Display *display, sfBool editor_enabled)
     {
         return;
     }
+    else if(!sfRenderWindow_hasFocus(display->render_window))
+    {
+        return;
+    }
     mfloat_t mouse_pos[VEC2_SIZE];
     mfloat_t last_mouse_click_pos[VEC2_SIZE];
     mfloat_t diff[VEC2_SIZE];
