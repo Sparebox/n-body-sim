@@ -2,9 +2,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <math.h>
 #include "sim.h"
 #include "editor.h"
 
+static void sat_find_min_separation(Rot_body *a, Rot_body *b, float *separation, mfloat_t *sep_normal);
 static void handle_left_click(Sim *sim);
 static void handle_mouse_scroll(Sim *sim, sfEvent *event);
 static void init_gui(Sim *sim);
@@ -50,10 +52,6 @@ void sim_poll_events(Sim *sim)
                         if(sim->editor.selected_body != NULL && !sim->editor.torque_mode_enabled)
                         {
                             editor_apply_velocity(&sim->editor, display);
-                        }
-                        else if(sim->editor.torque_mode_enabled)
-                        {
-                            editor_apply_torque(sim);
                         }
                         if(sim->editor.circle_mode_enabled)
                         {
@@ -230,7 +228,15 @@ void handle_left_click(Sim *sim)
     }
     if(!sim->display.mouse_was_on_body && sim->editor_enabled)
     {
-        if(sim->editor.circle_mode_enabled)
+        if(sim->editor.torque_mode_enabled)
+        {
+            bounds = sfRectangleShape_getGlobalBounds(sim->editor.rot_body->shape);
+            if(sfFloatRect_contains(&bounds, world_mouse_pos.x, world_mouse_pos.y))
+            {
+                sim->editor.rot_body_torque_point = world_mouse_pos;
+            }
+        }
+        else if(sim->editor.circle_mode_enabled)
         {
             sfCircleShape_setPosition(sim->editor.tool_circle, world_mouse_pos);
         }
@@ -673,10 +679,71 @@ sfVector2f sim_closest_point_to_line(const sfVector2f _pos, const sfVector2f _a,
     return (sfVector2f) {closest_point[0], closest_point[1]};
 }
 
-// Separating axis theorem collision check
-sfBool sim_sat_collision_check(Rot_body *a, Rot_body *b)
+void sim_get_normal(mfloat_t *result, const mfloat_t *point_a, const mfloat_t *point_b)
 {
+    mfloat_t a_to_b[VEC2_SIZE];
+    vec2_subtract(a_to_b, point_b, point_a);
+    vec2_tangent(result, a_to_b);
+    vec2_normalize(result, result);
+}
 
+// Separating axis theorem collision resolution
+void sim_sat_collision_resolution(Rot_body *a, Rot_body *b)
+{
+    float separation_a = 0.f;
+    float separation_b = 0.f;
+    mfloat_t normal_a[VEC2_SIZE];
+    mfloat_t normal_b[VEC2_SIZE];
+    mfloat_t offset[VEC2_SIZE];
+    sat_find_min_separation(a, b, &separation_a, normal_a);
+    sat_find_min_separation(b, a, &separation_b, normal_b);
+    if(separation_a > 0.f || separation_b > 0.f)
+    {
+        return; // No collision
+    }
+    if(separation_a < separation_b)
+    {
+        vec2_multiply_f(offset, normal_a, separation_a / 2.f);
+    }
+    else
+    {
+        vec2_multiply_f(offset, normal_b, separation_b / 2.f);
+    }
+    sfRectangleShape_move(a->shape, sim_to_sf_vector(offset));
+    vec2_negative(offset, offset);
+    sfRectangleShape_move(b->shape, sim_to_sf_vector(offset));
+}
+
+void sat_find_min_separation(Rot_body *a, Rot_body *b, float *result, mfloat_t *sep_normal)
+{
+    float separation = -INFINITY;
+    float min_separation = INFINITY;
+    mfloat_t normal[VEC2_SIZE];
+    mfloat_t point_a[VEC2_SIZE];
+    mfloat_t point_b[VEC2_SIZE];
+    mfloat_t point_c[VEC2_SIZE];
+    mfloat_t diff[VEC2_SIZE];
+    sfTransform a_transform = sfRectangleShape_getTransform(a->shape);
+    sfTransform b_transform = sfRectangleShape_getTransform(b->shape);
+    for(size_t i = 0; i < 4; i++)
+    {
+        sim_from_sf_vector(point_a, sfTransform_transformPoint(&a_transform, sfRectangleShape_getPoint(a->shape, i)));
+        sim_from_sf_vector(point_b, sfTransform_transformPoint(&a_transform, sfRectangleShape_getPoint(a->shape, (i + 1) % 4)));
+        sim_get_normal(normal, point_a, point_b);
+        min_separation = INFINITY;
+        for(size_t j = 0; j < 4; j++)
+        {
+            sim_from_sf_vector(point_c, sfTransform_transformPoint(&b_transform, sfRectangleShape_getPoint(b->shape, j)));
+            vec2_subtract(diff, point_c, point_b);
+            min_separation = fminf(min_separation, vec2_dot(diff, normal));
+        }
+        if(min_separation > separation)
+        {
+            separation = min_separation;
+            (*result) = separation;
+            vec2_assign(sep_normal, normal);
+        }
+    }
 }
 
 void sim_destroy(Sim *sim)

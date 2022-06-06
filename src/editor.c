@@ -161,6 +161,8 @@ void editor_update(Sim *sim)
         sfText_setScale(sim->editor.torque_line_text, text_scale);
         sfText_setRotation(sim->editor.torque_line_text, angle);
         sfText_setPosition(sim->editor.torque_line_text, world_mouse_pos);
+        if(sfMouse_isButtonPressed(sfMouseLeft))
+            editor_apply_torque(sim);
     }
 }
 
@@ -229,7 +231,6 @@ void editor_apply_torque(Sim *sim)
     mfloat_t cross[VEC3_SIZE];
     vec3_cross(cross, force, r);
     rot_body_apply_torque(sim->editor.rot_body, -cross[2]);
-    rot_body_apply_force(sim->editor.rot_body, force);
 }
 
 void editor_destroy(Editor *editor)
