@@ -6,7 +6,8 @@
 #include "sim.h"
 #include "editor.h"
 
-static void sat_find_min_separation(Rot_body *a, Rot_body *b, float *separation, mfloat_t *sep_normal);
+static void sat_find_min_separation_rect_rect(Rot_body *a, Rot_body *b, float *separation, mfloat_t *sep_normal);
+static void sat_find_min_separation_circle_rect(Body *circle, Rot_body *rect, float *separation, mfloat_t *sep_normal, mfloat_t *point_of_contact);
 static void handle_left_click(Sim *sim);
 static void handle_mouse_scroll(Sim *sim, sfEvent *event);
 static void init_gui(Sim *sim);
@@ -228,15 +229,7 @@ void handle_left_click(Sim *sim)
     }
     if(!sim->display.mouse_was_on_body && sim->editor_enabled)
     {
-        if(sim->editor.torque_mode_enabled)
-        {
-            bounds = sfRectangleShape_getGlobalBounds(sim->editor.rot_body->shape);
-            if(sfFloatRect_contains(&bounds, world_mouse_pos.x, world_mouse_pos.y))
-            {
-                sim->editor.rot_body_torque_point = world_mouse_pos;
-            }
-        }
-        else if(sim->editor.circle_mode_enabled)
+        if(sim->editor.circle_mode_enabled)
         {
             sfCircleShape_setPosition(sim->editor.tool_circle, world_mouse_pos);
         }
@@ -688,15 +681,15 @@ void sim_get_normal(mfloat_t *result, const mfloat_t *point_a, const mfloat_t *p
 }
 
 // Separating axis theorem collision resolution
-void sim_sat_collision_resolution(Rot_body *a, Rot_body *b)
+void sim_sat_collision_resolution_rect_rect(Rot_body *a, Rot_body *b)
 {
     float separation_a = 0.f;
     float separation_b = 0.f;
     mfloat_t normal_a[VEC2_SIZE];
     mfloat_t normal_b[VEC2_SIZE];
     mfloat_t offset[VEC2_SIZE];
-    sat_find_min_separation(a, b, &separation_a, normal_a);
-    sat_find_min_separation(b, a, &separation_b, normal_b);
+    sat_find_min_separation_rect_rect(a, b, &separation_a, normal_a);
+    sat_find_min_separation_rect_rect(b, a, &separation_b, normal_b);
     if(separation_a > 0.f || separation_b > 0.f)
     {
         return; // No collision
@@ -714,7 +707,7 @@ void sim_sat_collision_resolution(Rot_body *a, Rot_body *b)
     sfRectangleShape_move(b->shape, sim_to_sf_vector(offset));
 }
 
-void sat_find_min_separation(Rot_body *a, Rot_body *b, float *result, mfloat_t *sep_normal)
+void sat_find_min_separation_rect_rect(Rot_body *a, Rot_body *b, float *result, mfloat_t *sep_normal)
 {
     float separation = -INFINITY;
     float min_separation = INFINITY;
@@ -723,8 +716,8 @@ void sat_find_min_separation(Rot_body *a, Rot_body *b, float *result, mfloat_t *
     mfloat_t point_b[VEC2_SIZE];
     mfloat_t point_c[VEC2_SIZE];
     mfloat_t diff[VEC2_SIZE];
-    sfTransform a_transform = sfRectangleShape_getTransform(a->shape);
-    sfTransform b_transform = sfRectangleShape_getTransform(b->shape);
+    const sfTransform a_transform = sfRectangleShape_getTransform(a->shape);
+    const sfTransform b_transform = sfRectangleShape_getTransform(b->shape);
     for(size_t i = 0; i < 4; i++)
     {
         sim_from_sf_vector(point_a, sfTransform_transformPoint(&a_transform, sfRectangleShape_getPoint(a->shape, i)));
@@ -744,6 +737,90 @@ void sat_find_min_separation(Rot_body *a, Rot_body *b, float *result, mfloat_t *
             vec2_assign(sep_normal, normal);
         }
     }
+}
+
+void sim_collision_resolution_circle_rect(Body *circle, Rot_body *rect)
+{
+    float separation = 0.f;
+    mfloat_t normal[VEC2_SIZE];
+    mfloat_t offset[VEC2_SIZE];
+    mfloat_t point_of_contact[VEC2_SIZE];
+    sat_find_min_separation_circle_rect(circle, rect, &separation, normal, point_of_contact);
+    if(separation < 0.f)
+    {
+        return;
+    }
+    // Move bodies apart
+    vec2_multiply_f(offset, normal, separation / 2.f);
+    sfCircleShape_move(circle->shape, sim_to_sf_vector(offset));
+    vec2_negative(offset, offset);
+    sfRectangleShape_move(rect->shape, sim_to_sf_vector(offset));
+
+    mfloat_t rel_vel[VEC2_SIZE];
+    mfloat_t rect_pos[VEC2_SIZE];
+    mfloat_t circle_pos[VEC2_SIZE];
+    mfloat_t moment_arm_circle[] = {0.f, 0.f, 0.f};
+    mfloat_t moment_arm_rect[] = {0.f, 0.f, 0.f};
+    mfloat_t circle_cross[VEC3_SIZE];
+    mfloat_t rect_cross[VEC3_SIZE];
+    const float circle_inv_mass = 1.f / circle->mass;
+    const float rect_inv_mass = 1.f / rect->mass;
+
+    body_get_position(circle, circle_pos);
+    sim_from_sf_vector(rect_pos, sfRectangleShape_getPosition(rect->shape));
+    vec2_subtract(moment_arm_circle, point_of_contact, circle_pos);
+    vec2_subtract(moment_arm_rect, point_of_contact, rect_pos);
+    vec2_subtract(rel_vel, circle->vel, rect->vel);
+    vec3_cross(circle_cross, moment_arm_circle, normal);
+    vec3_cross(rect_cross, moment_arm_rect, normal);
+    float denominator = circle_inv_mass + rect_inv_mass;
+    denominator += powf(circle_cross[2], 2.f) / circle->moment_of_inertia;
+    denominator += powf(rect_cross[2], 2.f) / rect->moment_of_inertia;
+    const float nominator = -(1 + RESTITUTION_COEFF) * vec2_dot(rel_vel, normal);
+    const float impulse = nominator / denominator;
+    mfloat_t circle_linear_impulse[VEC2_SIZE];
+    mfloat_t rect_linear_impulse[VEC2_SIZE];
+
+    vec2_multiply_f(circle_linear_impulse, normal, impulse / circle->mass);
+    vec2_multiply_f(rect_linear_impulse, normal, -impulse / rect->mass);
+    vec2_add(circle->vel, circle->vel, circle_linear_impulse);
+    vec2_add(rect->vel, rect->vel, rect_linear_impulse);
+
+   mfloat_t rect_angular_impulse[VEC2_SIZE];
+   vec2_multiply_f(rect_angular_impulse, normal, -impulse);
+   vec3_cross(rect_cross, moment_arm_rect, rect_angular_impulse);
+   rect->angular_vel += rect_cross[2] / rect->moment_of_inertia;
+}
+
+void sat_find_min_separation_circle_rect(Body *circle, Rot_body *rect, float *result, mfloat_t *sep_normal, mfloat_t *point_of_contact)
+{
+    float min_separation = INFINITY;
+    float separation = 0.f;
+    mfloat_t normal[VEC2_SIZE];
+    mfloat_t point_a[VEC2_SIZE];
+    mfloat_t point_b[VEC2_SIZE];
+    mfloat_t circle_pos[VEC2_SIZE];
+    mfloat_t diff[VEC2_SIZE];
+    mfloat_t circle_surface[VEC2_SIZE];
+    const sfTransform rect_transform = sfRectangleShape_getTransform(rect->shape);
+    body_get_position(circle, circle_pos);
+    for(size_t j = 0; j < 4; j++)
+    {
+        sim_from_sf_vector(point_a, sfTransform_transformPoint(&rect_transform, sfRectangleShape_getPoint(rect->shape, j)));
+        sim_from_sf_vector(point_b, sfTransform_transformPoint(&rect_transform, sfRectangleShape_getPoint(rect->shape, (j + 1) % 4)));
+        sim_get_normal(normal, point_a, point_b);
+        vec2_multiply_f(circle_surface, normal, sfCircleShape_getRadius(circle->shape));
+        vec2_subtract(circle_surface, circle_pos, circle_surface);
+        vec2_subtract(diff, point_b, circle_surface);
+        separation = vec2_dot(diff, normal);
+        if(separation < min_separation)
+        {
+            min_separation = separation;
+            vec2_assign(sep_normal, normal);
+            vec2_assign(point_of_contact, circle_surface);
+        }
+    }
+    (*result) = min_separation;
 }
 
 void sim_destroy(Sim *sim)

@@ -11,6 +11,7 @@ typedef struct Body {
     mfloat_t last_acc[VEC2_SIZE];
     Trail trail;
     sfUint32 mass;
+    sfUint32 moment_of_inertia;
     sfCircleShape *shape;
     sfText *info_text;
 } Body;

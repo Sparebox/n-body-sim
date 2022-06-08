@@ -13,7 +13,8 @@ static void render(Sim *sim);
 static void update(Sim *sim);
 
 static Rot_body body_a;
-static Rot_body body_b;
+// static Rot_body body_b;
+static Body *circle;
 
 int main(int argc, char *argv[])
 {
@@ -35,7 +36,7 @@ int main(int argc, char *argv[])
     }
     // Release resources
     rot_body_destroy(&body_a);
-    rot_body_destroy(&body_b);
+    //rot_body_destroy(&body_b);
     sim_destroy(sim);
     return EXIT_SUCCESS;
 }
@@ -110,9 +111,10 @@ void initialize(Sim *sim, const int argc, char *argv[])
     parse_arguments(sim, argc, argv);
     display_init(&sim->display);
     sim_init(sim);
-    body_a = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y, 100.f, 50.f);
+    body_a = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y, 100.f, 5.f);
     sim->editor.rot_body = &body_a;
-    body_b = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y + 50.f, 100.f, 50.f);
+    circle = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y - 100, 100000);
+    // body_b = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y + 50.f, 100.f, 50.f);
  }
 
 void update(Sim *sim)
@@ -120,9 +122,13 @@ void update(Sim *sim)
     sim_poll_events(sim);
     display_handle_mouse_pan(&sim->display, sim->editor_enabled);
     sim_update(sim);
-    rot_body_update(&body_a, sfTime_asSeconds(sim->delta_time));
-    rot_body_update(&body_b, sfTime_asSeconds(sim->delta_time));
-    sim_sat_collision_resolution(&body_a, &body_b);
+    if(!sim->editor_enabled)
+    {
+        rot_body_update(&body_a, sfTime_asSeconds(sim->delta_time));
+        sim_collision_resolution_circle_rect(circle, &body_a);
+    }
+    // rot_body_update(&body_b, sfTime_asSeconds(sim->delta_time));
+    // sim_sat_collision_resolution(&body_a, &body_b);
 }
 
 void render(Sim *sim)
@@ -131,7 +137,7 @@ void render(Sim *sim)
     // Start rendering
     sim_render(sim);
     rot_body_render(&sim->display, &body_a);
-    rot_body_render(&sim->display, &body_b);
+    //rot_body_render(&sim->display, &body_b);
     // Stop rendering
     sfRenderWindow_display(sim->display.render_window);
 }

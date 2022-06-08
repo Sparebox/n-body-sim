@@ -1,7 +1,7 @@
 #pragma once
 #include "display.h"
 #include "mathc.h"
-#define ROT_BODY_DENSITY 0.1e-1f
+#define ROT_BODY_DENSITY 1.5e2f
 #define ROTATION_FRICTION_COEFF 1.f
 
 typedef struct {

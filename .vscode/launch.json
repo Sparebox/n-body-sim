@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}\\n-body-sim.exe",
-            "args": [],
+            "args": ["-g", "-b"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

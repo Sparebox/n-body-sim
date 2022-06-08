@@ -21,7 +21,6 @@ typedef struct Editor {
     sfText *torque_line_text;
     Body *selected_body;
     Rot_body *rot_body;
-    sfVector2f rot_body_torque_point;
     sfVector2f selected_body_pos;
     sfCircleShape *tool_circle;
     sfCircleShape *body_preview_circle;
@@ -98,4 +97,5 @@ sfVector2f sim_to_sf_vector(mfloat_t *vec2);
 void sim_from_sf_vector(mfloat_t *result, const sfVector2f sf_vec);
 sfVector2f sim_closest_point_to_line(const sfVector2f pos, const sfVector2f a, const sfVector2f b);
 void sim_get_normal(mfloat_t *result, const mfloat_t *point_a, const mfloat_t *point_b);
-void sim_sat_collision_resolution(Rot_body *a, Rot_body *b);
+void sim_sat_collision_resolution_rect_rect(Rot_body *a, Rot_body *b);
+void sim_collision_resolution_circle_rect(Body *circle, Rot_body *rect);

@@ -183,9 +183,11 @@ void solve_bounce_collision(Body *a, Body *b)
     const float b_radius = sfCircleShape_getRadius(b->shape);
     vec2_subtract(normal, a_pos, b_pos);
     vec2_normalize(normal, normal);
-    vec2_multiply_f(offset, normal, a_radius + b_radius - distance);
+    vec2_multiply_f(offset, normal, (a_radius + b_radius - distance) / 2.f);
     vec2_add(a_pos, a_pos, offset);
     sfCircleShape_setPosition(a->shape, sim_to_sf_vector(a_pos));
+    vec2_subtract(b_pos, b_pos, offset);
+    sfCircleShape_setPosition(b->shape, sim_to_sf_vector(b_pos));
     // Apply impulse
     mfloat_t rel_vel[VEC2_SIZE];
     mfloat_t impulse_a[VEC2_SIZE];
@@ -193,11 +195,11 @@ void solve_bounce_collision(Body *a, Body *b)
     vec2_subtract(rel_vel, a->vel, b->vel);
     const float a_inv_mass = 1.f / a->mass;
     const float b_inv_mass = 1.f / b->mass;
-    const float impulse = (RESTITUTION_COEFF * vec2_dot(rel_vel, normal)) / (a_inv_mass + b_inv_mass);
-    vec2_multiply_f(impulse_a, normal, -impulse / a->mass);
-    vec2_multiply_f(impulse_b, normal, impulse / b->mass);
-    vec2_assign(a->vel, impulse_a);
-    vec2_assign(b->vel, impulse_b);
+    const float impulse = (-(1 + RESTITUTION_COEFF) * vec2_dot(rel_vel, normal)) / (a_inv_mass + b_inv_mass);
+    vec2_multiply_f(impulse_a, normal, impulse / a->mass);
+    vec2_multiply_f(impulse_b, normal, -impulse / b->mass);
+    vec2_add(a->vel, a->vel, impulse_a);
+    vec2_add(b->vel, b->vel, impulse_b);
 }
 
 void body_check_collisions(Body **possible_collisions, Body *bodies, sfUint32 *num_of_bodies, sfUint32 *collision_type)
@@ -334,6 +336,7 @@ Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float
         printf("Tried to overallocate body array!\n");
         return NULL;
     }
+    body->moment_of_inertia = (2.f / 5.f) * mass * powf(mass / BODY_RADIUS_FACTOR, 2.f);
     const sfVector2f pos = {x, y};
     const sfVector2f origin = {mass / BODY_RADIUS_FACTOR, mass / BODY_RADIUS_FACTOR};
     sfCircleShape_setOrigin(body->shape, origin);
