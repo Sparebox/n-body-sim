@@ -63,6 +63,7 @@ Rot_body rot_body_create(Display *display, const float x, const float y, const f
     body.angular_acc = 0.f;
     body.mass = width * height * ROT_BODY_DENSITY;
     assert(body.mass > 0.f);
+    // Shape
     const sfVector2f pos = {x, y};
     const sfVector2f origin = {width / 2.f, height / 2.f};
     const sfVector2f scale = {width, height};
@@ -70,12 +71,15 @@ Rot_body rot_body_create(Display *display, const float x, const float y, const f
     sfRectangleShape_setOrigin(body.shape, origin);
     sfRectangleShape_setPosition(body.shape, pos);
     calculate_moment_of_inertia(&body);
+    // Color
     const sfUint8 red = sim_random_int(0, 255);
     const sfUint8 green = sim_random_int(0, 255);
     const sfUint8 blue = sim_random_int(0, 255);
     const sfColor color = sfColor_fromRGB(red, green, blue);
     sfRectangleShape_setFillColor(body.shape, color);
-
+    sfRectangleShape_setOutlineColor(body.shape, sfWhite);
+    sfRectangleShape_setOutlineThickness(body.shape, 1.f);
+    // Info text
     body.info_text = sfText_create();
     sfText_setPosition(body.info_text, pos);
     sfText_setOrigin(body.info_text, origin);

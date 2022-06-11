@@ -12,9 +12,7 @@ static void parse_arguments(Sim *sim, const int argc, char *argv[]);
 static void render(Sim *sim);
 static void update(Sim *sim);
 
-static Rot_body body_a;
-// static Rot_body body_b;
-static Body *circle;
+//static Body *body = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -35,15 +33,13 @@ int main(int argc, char *argv[])
         sim->delta_time = sfClock_restart(sim->delta_clock);
     }
     // Release resources
-    rot_body_destroy(&body_a);
-    //rot_body_destroy(&body_b);
     sim_destroy(sim);
     return EXIT_SUCCESS;
 }
 
 void parse_arguments(Sim *sim, const int argc, char *argv[])
 {
-    if(argc > 3)
+    if(argc > 4)
     {
         fprintf(stderr, "Too many arguments given! Exiting\n");
         exit(EXIT_FAILURE);
@@ -62,7 +58,7 @@ void parse_arguments(Sim *sim, const int argc, char *argv[])
         {
             sim->sim_type = ROTATIONAL_PHYSICS_SIM;
         }
-        if(argc == 3) // Two arguments given
+        if(argc > 2) // Two arguments given
         {
             if(!strcmp(argv[2], "-b"))
             {
@@ -71,6 +67,17 @@ void parse_arguments(Sim *sim, const int argc, char *argv[])
             else if(!strcmp(argv[2], "-m"))
             {
                 sim->collision_type = MERGE_COLLISIONS;
+            }
+        }
+        if(argc == 4) // Three arguments given
+        {
+            if(!strcmp(argv[3], "-v"))
+            {
+                sim->integrator = VERLET;
+            }
+            else if(!strcmp(argv[3], "-rk4"))
+            {
+                sim->integrator = RUNGE_KUTTA;
             }
         }
         else
@@ -82,6 +89,7 @@ void parse_arguments(Sim *sim, const int argc, char *argv[])
     {
         sim->sim_type = GRAVITATIONAL_SIM;
         sim->collision_type = MERGE_COLLISIONS;
+        sim->integrator = VERLET;
     }
     switch(sim->sim_type)
     {
@@ -104,6 +112,15 @@ void parse_arguments(Sim *sim, const int argc, char *argv[])
             printf("Merge collisions enabled\n");
             break;
     }
+    switch(sim->integrator)
+    {
+        case VERLET:
+            printf("Verlet integration enabled\n");
+            break;
+        case RUNGE_KUTTA:
+            printf("Runge-Kutta integration enabled\n");
+            break;
+    }
 }
 
 void initialize(Sim *sim, const int argc, char *argv[]) 
@@ -111,10 +128,7 @@ void initialize(Sim *sim, const int argc, char *argv[])
     parse_arguments(sim, argc, argv);
     display_init(&sim->display);
     sim_init(sim);
-    body_a = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y, 100.f, 5.f);
-    sim->editor.rot_body = &body_a;
-    circle = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X, WIN_CENTER_Y - 100, 100000);
-    // body_b = rot_body_create(&sim->display, WIN_CENTER_X, WIN_CENTER_Y + 50.f, 100.f, 50.f);
+    //body = body_create(&sim->display, sim->bodies, &sim->num_of_bodies, WIN_CENTER_X + 10.f, WIN_CENTER_Y + 50.f, BODY_DEFAULT_MASS * 10);
  }
 
 void update(Sim *sim)
@@ -122,13 +136,6 @@ void update(Sim *sim)
     sim_poll_events(sim);
     display_handle_mouse_pan(&sim->display, sim->editor_enabled);
     sim_update(sim);
-    if(!sim->editor_enabled)
-    {
-        rot_body_update(&body_a, sfTime_asSeconds(sim->delta_time));
-        sim_collision_resolution_circle_rect(circle, &body_a);
-    }
-    // rot_body_update(&body_b, sfTime_asSeconds(sim->delta_time));
-    // sim_sat_collision_resolution(&body_a, &body_b);
 }
 
 void render(Sim *sim)
@@ -136,8 +143,6 @@ void render(Sim *sim)
     sfRenderWindow_clear(sim->display.render_window, sfBlack);
     // Start rendering
     sim_render(sim);
-    rot_body_render(&sim->display, &body_a);
-    //rot_body_render(&sim->display, &body_b);
     // Stop rendering
     sfRenderWindow_display(sim->display.render_window);
 }

@@ -364,6 +364,7 @@ void sim_update(Sim *sim)
             }
             body_update(
                 &sim->bodies[i],
+                sim->integrator,
                 sfTime_asSeconds(sim->delta_time) * sim->sim_speed_multiplier
             );
         }
@@ -526,6 +527,16 @@ void sim_random_vector(mfloat_t *result, sfUint32 min_length, sfUint32 max_lengt
     vec2_one(result);
     vec2_rotate(result, result, sim_random_float(0.f, 2 * M_PI));
     vec2_multiply_f(result, result, sim_random_int(min_length, max_length));
+}
+
+void sim_print_vector(const mfloat_t *vec)
+{
+    printf("Vec: [%.2f, %.2f]\n", vec[0], vec[1]);
+}
+
+void sim_print_sf_vector(const sfVector2f *vec)
+{
+    printf("Vec: [%.2f, %.2f]\n", vec->x, vec->y);
 }
 
 void sim_apply_gravitation_forces(Body *bodies)

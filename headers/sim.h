@@ -3,7 +3,9 @@
 #include "body.h"
 #include "rot_body.h"
 #define MAX_BODIES 2048
+#define SUB_STEPS 2
 #define GRAVITATIONAL_CONSTANT 6.67e-1f
+#define GRAVITY_ENABLED 1
 #define HAMAKER_COEFF 1e11f // Van Der Waals forces
 #define EPSILON_0 1.0e-3f   // Coulombic forces
 #define RESTITUTION_COEFF 1.f
@@ -40,6 +42,11 @@ typedef enum Collision_type {
     MERGE_COLLISIONS        // 2# Cmd line argument flag -m
 } Collision_type;
 
+typedef enum Integrator {
+    VERLET,                 // 3# Cmd line argument flag -v
+    RUNGE_KUTTA             // 3# Cmd line argument flag -rk4
+} Integrator;
+
 typedef struct Sim {
     sfClock *delta_clock;
     sfTime delta_time;
@@ -62,6 +69,7 @@ typedef struct Sim {
     Editor editor;
     Sim_type sim_type;
     Collision_type collision_type;
+    Integrator integrator;
     Body *largest_body;
     Body *followed_body;
     Body bodies[MAX_BODIES];
@@ -95,6 +103,8 @@ void sim_coulombic_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat
 void sim_van_der_waals_force(mfloat_t *result, Body *a, Body *b, float dist2, mfloat_t *direction);
 sfVector2f sim_to_sf_vector(mfloat_t *vec2);
 void sim_from_sf_vector(mfloat_t *result, const sfVector2f sf_vec);
+void sim_print_vector(const mfloat_t *vec);
+void sim_print_sf_vector(const sfVector2f *vec);
 sfVector2f sim_closest_point_to_line(const sfVector2f pos, const sfVector2f a, const sfVector2f b);
 void sim_get_normal(mfloat_t *result, const mfloat_t *point_a, const mfloat_t *point_b);
 void sim_sat_collision_resolution_rect_rect(Rot_body *a, Rot_body *b);

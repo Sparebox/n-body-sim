@@ -6,19 +6,30 @@
 #include "sim.h"
 #include "trail.h"
 
-static void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta_time);
+static void velocity_verlet_integrate(Body *body, mfloat_t *new_pos, const float delta_time);
+static void runge_kutta_integrate(Body *body, mfloat_t *new_pos, const float delta_time);
 static void solve_merge_collision(Body *a, Body *b, Body *bodies, sfUint32 *num_of_bodies);
 static void solve_bounce_collision(Body *a, Body *b);
 static int compare_x_axis(const void *a, const void *b);
 
-void body_update(Body *body, const float delta_time)
+static const mfloat_t GRAVITY[] = {0.f, 9.81e3f};
+
+void body_update(Body *body, sfUint8 integrator, const float delta_time)
 {
     // Trail
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
     trail_append(&body->trail, pos.x, pos.y);
     // Velocity verlet integration
     mfloat_t new_pos_result[VEC2_SIZE];
-    velocity_verlet_integerate(body, new_pos_result, delta_time);
+    switch(integrator)
+    {
+        case VERLET:
+            velocity_verlet_integrate(body, new_pos_result, delta_time);
+            break;
+        case RUNGE_KUTTA:
+            runge_kutta_integrate(body, new_pos_result, delta_time);
+            break;
+    }
     sfVector2f new_pos = {new_pos_result[0], new_pos_result[1]};
     //Limit speed
     if(vec2_length_squared(body->vel) > BODY_SPEED_LIMIT * BODY_SPEED_LIMIT && VELOCITY_LIMITED)
@@ -31,12 +42,16 @@ void body_update(Body *body, const float delta_time)
     sfText_setPosition(body->info_text, new_pos);
 }
 
-void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta_time)
+void velocity_verlet_integrate(Body *body, mfloat_t *new_pos, const float delta_time)
 {
     mfloat_t pos[VEC2_SIZE];
     mfloat_t temp[VEC2_SIZE];
     body_get_position(body, pos);
-
+    // Apply gravity
+    if(GRAVITY_ENABLED)
+    {
+        vec2_add(body->acc, body->acc, GRAVITY);
+    }
     // New position
     vec2_multiply_f(temp, body->vel, delta_time);
     vec2_add(new_pos, pos, temp);
@@ -48,6 +63,50 @@ void velocity_verlet_integerate(Body *body, mfloat_t *new_pos, const float delta
     vec2_add(body->vel, temp, body->vel);
 
     vec2_assign(body->last_acc, body->acc);
+    vec2_zero(body->acc);
+}
+
+void runge_kutta_integrate(Body *body, mfloat_t *new_pos, const float delta_time)
+{
+    if(GRAVITY_ENABLED)
+    {
+        vec2_add(body->acc, body->acc, GRAVITY);
+    }
+    mfloat_t pos[VEC2_SIZE];
+    mfloat_t diff[VEC2_SIZE];
+    mfloat_t k1[VEC2_SIZE];
+    mfloat_t k2[VEC2_SIZE];
+    mfloat_t k3[VEC2_SIZE];
+    mfloat_t k4[VEC2_SIZE];
+    body_get_position(body, pos);
+    // New position
+    vec2_assign(k1, body->vel);
+    vec2_multiply_f(k2, k1, delta_time / 2.f);
+    vec2_multiply_f(k3, k2, delta_time / 2.f);
+    vec2_multiply_f(k4, k3, delta_time);
+    vec2_add(diff, diff, k1);
+    vec2_add(diff, diff, k4);
+    vec2_multiply_f(k2, k2, 2.f);
+    vec2_multiply_f(k3, k3, 2.f);
+    vec2_add(diff, diff, k2);
+    vec2_add(diff, diff, k3);
+    vec2_multiply_f(diff, diff, 1.f/6.f * delta_time);
+    vec2_add(new_pos, pos, diff);
+    // New velocity
+    vec2_assign(k1, body->acc);
+    vec2_multiply_f(k2, k1, delta_time / 2.f);
+    vec2_multiply_f(k3, k2, delta_time / 2.f);
+    vec2_multiply_f(k4, k3, delta_time);
+    vec2_add(diff, diff, k1);
+    vec2_add(diff, diff, k4);
+    vec2_multiply_f(k2, k2, 2.f);
+    vec2_multiply_f(k3, k3, 2.f);
+    vec2_add(diff, diff, k2);
+    vec2_add(diff, diff, k3);
+
+    vec2_multiply_f(diff, diff, 1.f/6.f * delta_time);
+    vec2_add(body->vel, body->vel, diff);
+
     vec2_zero(body->acc);
 }
 
@@ -275,6 +334,20 @@ void body_apply_mass(Body *body, sfUint32 mass)
     sfText_setPosition(body->info_text, pos);
 }
 
+void body_apply_constraint(Body *body, const mfloat_t *constraint_pos, const float radius)
+{
+    mfloat_t rel_pos[VEC2_SIZE];
+    mfloat_t direction[VEC2_SIZE];
+    mfloat_t pos[VEC2_SIZE];
+    mfloat_t correction[VEC2_SIZE];
+    body_get_position(body, pos);
+    vec2_subtract(rel_pos, constraint_pos, pos);
+    vec2_normalize(direction, rel_pos);
+    const float diff = vec2_length_squared(rel_pos) - powf(radius, 2.f);
+    vec2_multiply_f(correction, direction, diff);
+    vec2_add(body->vel, body->vel, correction);
+}
+
 void body_get_position(Body *body, mfloat_t *result)
 {
     const sfVector2f pos = sfCircleShape_getPosition(body->shape);
@@ -337,21 +410,27 @@ Body* body_create(Display *display, Body *bodies, sfUint32 *num_of_bodies, float
         return NULL;
     }
     body->moment_of_inertia = (2.f / 5.f) * mass * powf(mass / BODY_RADIUS_FACTOR, 2.f);
+    // Shape
     const sfVector2f pos = {x, y};
     const sfVector2f origin = {mass / BODY_RADIUS_FACTOR, mass / BODY_RADIUS_FACTOR};
     sfCircleShape_setOrigin(body->shape, origin);
     sfCircleShape_setPosition(body->shape, pos);
+    // Color
     const sfUint8 red = sim_random_int(0, 255);
     const sfUint8 green = sim_random_int(0, 255);
     const sfUint8 blue = sim_random_int(0, 255);
     const sfColor color = sfColor_fromRGB(red, green, blue);
     sfCircleShape_setFillColor(body->shape, color);
+    sfCircleShape_setOutlineColor(body->shape, sfWhite);
+    sfCircleShape_setOutlineThickness(body->shape, 1.f);
+    // Trail
     body->trail.color = color;
     body->trail.trail_timer = sfClock_create();
     body->trail.current_index = 0;
     memset(body->trail.vertices, 0, MAX_TRAIL_VERTICES * sizeof(sfVertex));
     body->trail.vertices[MAX_TRAIL_VERTICES - 1].position = pos;
-    sfText_setPosition(body->info_text, pos);
+    // Info text
+    sfText_setPosition(body->info_text, sfCircleShape_getPosition(body->shape));
     sfText_setOrigin(body->info_text, origin);
     sfText_setFont(body->info_text, display->font);
     sfText_setColor(body->info_text, sfRed);
